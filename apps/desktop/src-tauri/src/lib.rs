@@ -151,13 +151,67 @@ document.documentElement.appendChild(el);
 if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",show);}else{show();}
 })();"#;
 
+fn build_login_script(client_id: Option<String>, base: &str) -> String {
+    let mut script = String::new();
+    if let Some(cid) = client_id {
+        script.push_str(&format!(
+            r#"(function(){{
+var CID={cid_json};var BASE={base_json};
+if(!CID||!BASE)return;
+var done=false;
+function check(){{
+if(done)return;
+fetch('https://api-v2.soundcloud.com/me?client_id='+CID,{{credentials:'include'}})
+.then(function(r){{if(r.status===200){{done=true;location.href=BASE+'/auth-login-complete';}}}})
+.catch(function(){{}});
+}}
+setInterval(check,2000);check();
+}})();
+"#,
+            cid_json = serde_json::to_string(&cid).unwrap(),
+            base_json = serde_json::to_string(base).unwrap(),
+        ));
+    }
+    script.push_str(
+        r#"(function(){
+if(window.location.hostname!=="soundcloud.com")return;
+var KEY="sl_login_close_hint";
+try{if(sessionStorage.getItem(KEY))return;}catch(e){}
+function show(){
+var el=document.createElement("div");
+el.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;background:#18181b;color:#f4f4f6;border:1px solid #2ecc71;border-radius:10px;padding:10px 14px;font:13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.45);display:flex;align-items:center;gap:10px;";
+el.innerHTML="¿Ya ves tu sesión de SoundCloud abierta? Cierra esta ventana y Soundlite te dejará entrar automáticamente.";
+var btn=document.createElement("button");
+btn.textContent="Entendido";
+btn.style.cssText="flex-shrink:0;background:#2ecc71;color:#fff;border:none;border-radius:999px;padding:5px 12px;font:600 12px -apple-system,sans-serif;cursor:pointer;";
+btn.onclick=function(){try{sessionStorage.setItem(KEY,"1");}catch(e){}el.remove();};
+el.appendChild(btn);
+document.documentElement.appendChild(el);
+}
+if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",show);}else{show();}
+})();
+"#,
+    );
+    script.push_str(LOGIN_HINT_SCRIPT);
+    script
+}
+
 #[tauri::command]
-async fn login_window(app: AppHandle) -> Result<(), String> {
+async fn login_window(app: AppHandle, state: State<'_, ClientIdState>) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(LOGIN_LABEL) {
         let _ = window.show();
         let _ = window.set_focus();
         return Ok(());
     }
+    let client_id = get_client_id(state).await.ok();
+    let base = app
+        .get_webview_window("main")
+        .and_then(|main| main.url().ok())
+        .map(|main| format!("{}//{}", main.scheme(), main.host_str().unwrap_or("localhost")))
+        .unwrap_or_else(|| "tauri://localhost".to_string());
+    let script = build_login_script(client_id, &base);
+    let app_for_page_load = app.clone();
+    let app_for_events = app.clone();
     WebviewWindowBuilder::new(
         &app,
         LOGIN_LABEL,
@@ -167,11 +221,17 @@ async fn login_window(app: AppHandle) -> Result<(), String> {
     .inner_size(1000.0, 760.0)
     .min_inner_size(720.0, 560.0)
     .center()
-    .initialization_script(LOGIN_HINT_SCRIPT)
+    .initialization_script(&script)
     .on_new_window(allow_popup(app.clone()))
+    .on_page_load(move |_webview, payload| {
+        if payload.event() == PageLoadEvent::Finished
+            && payload.url().as_str().contains("auth-login-complete")
+        {
+            close_login_windows_in(&app_for_page_load);
+        }
+    })
     .build()
     .map(|window| {
-        let app_for_events = app.clone();
         window.on_window_event(move |event| {
             if let tauri::WindowEvent::Destroyed = event {
                 close_login_windows_in(&app_for_events);

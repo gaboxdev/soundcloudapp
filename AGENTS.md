@@ -35,7 +35,7 @@ Los medios (CDN mp3 `cf-media.sndcdn.com`, waveforms `wave.sndcdn.com`) sí env�
 
 SoundCloud no permite registrar apps OAuth nuevas → la sesión se hace con el login nativo de soundcloud.com dentro de la webview de Tauri (cookies compartidas entre ventanas del mismo data store). Comandos Rust en `apps/desktop/src-tauri/src/lib.rs`:
 
-- `login_window` / `logout_window`: abren una ventana con soundcloud.com / soundcloud.com/logout.
+- `login_window` / `logout_window`: abren una ventana con soundcloud.com / soundcloud.com/logout. La ventana de login lleva un script inyectado que (1) consulta `/me` cada 2s y al detectar sesión navega a `tauri://localhost/auth-login-complete` (Rust la cierra junto a los popups) y (2) muestra avisos flotantes (sesión abierta → cerrar ventana; passkeys no soportados en Google/Apple). Los popups de OAuth se crean como ventanas Tauri `sl-popup-N` (comparten cookies y se pueden cerrar). `close_login_windows` cierra login + popups.
 - `authed_request(method, url, body)`: webview oculta `sl-bridge` cargada en `soundcloud.com/robots.txt` (mismo origen → envía cookies y el CORS de la API la permite). Ejecuta `fetch` con `credentials: 'include'` y devuelve el resultado navegando a `tauri://localhost/auth-bridge?status=..&body=..` (se captura con `on_page_load` y se resuelve con oneshot). El cliente TS parsea `"status\nbody"`.
 
 En web (`ProxyTransport`) `authedRequest` lanza error → las vistas deben comprobar `isDesktop()` (`apps/web/src/api/auth.ts`) antes de ofrecer login.
