@@ -93,6 +93,7 @@ Al abrir la app se muestra la pantalla de acceso (`src/components/logingate.ts`)
 - `player` (`apps/web/src/player/player.ts`): singleton, `player.store.subscribe(fn)` — estado: `{ queue: Track[], index, playing, repeat: 'off'|'all'|'one', shuffle, volume, current, duration, progress, buffered, loading, error, likes: Track[], isLiked, history }`.
   - API: `playTrack(track, queue?, index?)`, `playQueue(tracks, start)`, `toggle()`, `next()`, `prev()`, `jumpTo(i)`, `seekTo(ms)`, `seekRatio(r)`, `setVolume(v)`, `toggleMute()`, `cycleRepeat()`, `toggleShuffle()`, `addToQueue(track)`, `removeFromQueue(i)`, `clearQueue()`, `isLiked(track)`, `toggleLike(track)`, `syncAccountLikes()`.
   - La cola, repeat, shuffle y volumen persisten en localStorage. `likes` se sincroniza con la cuenta de SoundCloud en desktop (si no hay sesión o en web, usa el caché local).
+  - **Reanudar posición.** `sl:player:queue` guarda además `{ trackId, progress }`. El `trackId` NO es redundante: `playTrack()` y `jumpTo()` llaman a `persist()` ANTES de `setCurrent()`, así que en ese instante `state.progress` todavía es el del track anterior. Al restaurar solo se aplica `progress` si `trackId === queue[index].id`; si no, se descarta. Se guarda cada 5 s mientras suena, al pausar, y en `pagehide` + `visibilitychange`. Estos dos últimos leen `audio.currentTime` DIRECTO en vez del store, porque el `timeupdate` está envuelto en `requestAnimationFrame` y no corre con la ventana oculta — sin eso, cerrar la app minimizada guardaría una posición congelada. Al arrancar solo se reanuda por encima de 5 s y nunca a menos de 5 s del final; el salto se aplica en `loadedmetadata` (poner `currentTime` antes de tener metadatos no hace nada, ni en progresivo ni en HLS). No se auto-reproduce: se restaura la posición y se reanuda al dar a play.
 - `createStore` (`src/core/store.ts`): micro-store pub/sub.
 - Settings (`src/core/settings.ts`): `{ version, theme, apiBase, volume }` con `getSettings()/updateSettings()`. Se sanea campo a campo al cargar y al escribir (theme del conjunto permitido, `volume` con clamp 0–1, `apiBase` validado con `new URL()` y sin barra final) y migra por `version`. `watchSystemTheme()` re-aplica el tema al cambiar el del sistema.
 
@@ -114,7 +115,7 @@ Rutas: `''/home`, `/search?q=`, `/charts`, `/track/:id`, `/playlist/:id`, `/user
 
 - `src/ui/el.ts`: builder `h(tag, attrs, children)`, `svgIcon(name, size)` (≈50 iconos: play, pause, next, prev, shuffle, repeat, repeatOne, heart, heartFill, search, queue, home, chart, comment, repost, download, more, settings, external, back, forward, close, check, music, playlist, user, trend, disc, clock, eye, github, trash, info, code, flag, list, sun, moon, headphone, waves, link, plus, minus, radio), `esc()`.
 - `src/core/utils.ts`: `esc()`, `fmtTime(ms)`, `fmtCount(n)`, `timeAgo(iso)`, `formatDate(iso)`, `artworkUrl(url, 't500x500')`, `initials(label)`, `debounce`, `clamp`, `shuffle`. **`esc()` es SOLO para interpolar en `innerHTML`**: `h()` inserta los hijos con `createTextNode`, que ya escapa, así que pasarle `esc(...)` produce entidades visibles (`Rock &amp;amp; Roll`).
-- `src/ui/artwork.ts`: `artEl(url, label, {size, blur})` (lazy + fallback iniciales), `avatarEl(url, label, size)`. El `<img>` va **después** del `.art-fallback` en el DOM y **ambos deben ser `position:absolute`**: si la imagen queda estática, el fallback (que sí está posicionado) se pinta encima y tapa la portada en toda la app. Al aplicar clases al nodo devuelto usar `classList.add()`, **nunca `className =`**: reemplazar la clase tira `art-frame` y con ella el `aspect-ratio`, el `overflow` y el fundido de `.loaded`.
+- `src/ui/artwork.ts`: `artEl(url, label, {size, href, title})` (lazy + fallback iniciales), `artOverlay(icon, size)`, `avatarEl(url, label, size)`. Con `href` el nodo devuelto es un `<a>` (no un `div`) y lleva `.art-open`, que revela el `.art-overlay` al pasar el ratón. **La portada de un track SIEMPRE abre la ficha del track** (fila, héroe de inicio, isla del reproductor); el resto de la fila reproduce. Funciona porque el `click` de `.track-row` sale antes si el objetivo está dentro de un `<a>`. Nunca poner blur sobre la portada: la miniatura ya es la única pista visual de qué canción es. El `<img>` va **después** del `.art-fallback` en el DOM y **ambos deben ser `position:absolute`**: si la imagen queda estática, el fallback (que sí está posicionado) se pinta encima y tapa la portada en toda la app. Al aplicar clases al nodo devuelto usar `classList.add()`, **nunca `className =`**: reemplazar la clase tira `art-frame` y con ella el `aspect-ratio`, el `overflow` y el fundido de `.loaded`.
 - `src/ui/waveform.ts`: `waveformEl({ interactive, showHover, getDuration, onSeek })` → controller `{ el, setSamples(number[]), setProgress(ratio), setLoading(bool) }`.
 - `src/components/trackrow.ts`: `trackRow(track, { rank?, showPlays?, onPlay? })` (fila estándar: arte, título, artista, like, añadir a cola, duración) y `trackRowSkeleton()`. Usar para TODAS las listas.
 - `src/ui/toast.ts`: `toast(msg, kind)`, `toastOK`, `toastErr`.
@@ -144,9 +145,9 @@ Rutas: `''/home`, `/search?q=`, `/charts`, `/track/:id`, `/playlist/:id`, `/user
 | `--text` | `#f7f7fa` | 10.4:1 | 12.2:1 |
 | `--text2` | `#cbcbd6` | 7.0:1 | 7.7:1 |
 | `--text3` | `#a6a6b2` | 4.6:1 | 5.4:1 |
-| `--accent-text` | `#ff8a4d` | 4.9:1 | 5.7:1 |
+| `--accent-text` | `#b3a1ff` | 5.1:1 | 6.0:1 |
 
-En claro el caso peor es el espejo (carátula NEGRA sobre velo blanco, fondo `rgb(209,209,211)`): `#101014` 13.4:1, `#3d3d46` 7.0:1, `#56565f` 4.8:1, `#9c2b00` 5.0:1. El preset `cristal` sube `--text2`/`--text3` un tramo dentro de su propio bloque, porque con menos velo la escalera base se quedaba en 3.7:1.
+En claro el caso peor es el espejo (carátula NEGRA sobre velo blanco, fondo `rgb(209,209,211)`): `#101014` 13.4:1, `#3d3d46` 7.0:1, `#56565f` 4.8:1, `#4c2fd0` 5.2:1. El preset `cristal` sube `--text2`/`--text3` un tramo dentro de su propio bloque, porque con menos velo la escalera base se quedaba en 3.7:1.
 
 **Si tocas `--ambient-veil`, recalcula la escalera.** Es la única dependencia numérica real del sistema.
 
@@ -172,19 +173,52 @@ En macOS el maximizar ocurre en `mouseup` (se cancela si el ratón se movió), n
 
 `:root[data-titlebar='overlay'] .app-header` reserva `padding-left: 88px` para los semáforos de macOS.
 
+### Barra superior escondible (`data-topbar`)
+
+Tres modos en `<html>` (Ajustes › Barra superior, preset en el script inline de `index.html`), con la lógica en `ui/topbar.ts`:
+
+- `fija` (defecto) — `sticky`, siempre visible.
+- `auto` — sigue siendo `sticky` y se va con `translateY(-101%)` al bajar; vuelve al subir, al llegar arriba, al acercar el ratón al borde o al recibir foco. **Sigue ocupando su hueco en el flujo a propósito**: si se sacara del flujo, el contenido daría un salto de 60 px en cada aparición. El hueco vacío deja ver el escritorio, que es justo el efecto buscado.
+- `oculta` — pasa a `fixed` y el contenido recupera esos 60 px.
+
+`.topbar-edge` es una franja fija en el borde superior (10 px en web, 30 px en escritorio) que hace dos cosas a la vez: es la zona que revela la barra y lleva `data-tauri-drag-region`, porque con la barra escondida no queda ningún otro asidero para mover la ventana. Se oculta en modo `fija` (ahí la cabecera ya es la región de arrastre).
+
+Con `titleBarStyle: Overlay` la webview llega al borde, así que en `oculta` `.app-main` sube su `padding-top` a 36 px para que el contenido no se meta bajo los semáforos.
+
+La clase `.topbar-off` sólo tiene efecto dentro de `[data-topbar='auto'|'oculta']`: así, al volver a `fija`, la cabecera reaparece aunque la clase se haya quedado puesta. `ui/topbar.ts` observa el atributo con un `MutationObserver` para repintar al cambiar el ajuste sin acoplar `core/settings.ts` a la UI.
+
 ### Sistema de diseño (design.css)
 
 Tokens de superficie: `--surface`/`--surface2`/`--surface3` y `--border`/`--border2` son **velos**, no colores — están mapeados a `--veil*` y `--hairline*` de acrylic.css. Por eso toda hoja de vista que ya los usaba se volvió acrílica sin tocarla. `--bg` es el suelo opaco.
 
 Excepciones deliberadas: `--solid`, `--solid-2`, `--scrim`. Para lo que tiene que RECORTAR o TAPAR de verdad (anillo del avatar sobre la portada, globo de tiempo de la onda, scrim del login). Un velo ahí no recorta: deja ver el borde.
 
-Otros tokens: `--text`, `--text2`, `--text3`, `--accent #ff5500`, `--accent2 #ff2d78`, `--accent-grad`, `--accent-soft`, `--accent-text`, `--wave`, `--wave-progress`, `--radius 16px`, `--radius-sm 10px`, `--radius-lg 22px`, `--header-h 60px`, `--player-h 92px`, `--player-gap 12px`, `--ease`. Tema claro vía `[data-theme="light"]` (todos redefinidos — NO poner colores hardcodeados).
+Otros tokens: `--text`, `--text2`, `--text3`, `--accent #7857ff`, `--accent2 #6344e8`, `--accent-grad`, `--accent-soft`, `--accent-text`, `--wave`, `--wave-progress`, `--radius 16px`, `--radius-sm 10px`, `--radius-lg 22px`, `--header-h 60px`, `--player-h 92px`, `--player-gap 12px`, `--ease`. Tema claro vía `[data-theme="light"]` (todos redefinidos — NO poner colores hardcodeados).
 
 Layout: la cabecera es lámina de borde a borde y el reproductor es una **isla flotante** (`fixed` con `--player-gap` por los cuatro lados). La isla lleva `overflow: hidden`, así que `--player-h` tiene que caber de verdad: controles 42 + hueco 4 + onda 36 + 10 de aire = 92. Como barra pegada al borde el desbordamiento no se veía; en una isla se recorta.
 
 El acento es lo único NO translúcido de la interfaz: en un mundo de cristal, una sola pieza sólida y encendida se lleva la mirada sin necesidad de tamaño ni de peso tipográfico.
 
+**Ficha de track** (`views/track.css`): la cabecera es una tarjeta (`card card-pad track-hero`) con la portada a 288 px y, detrás de ella, `.track-art-glow` — la misma portada difuminada 38 px y saturada al 190%, en óvalo y al 50%. Es el único sitio donde la carátula vuelve a pintar fondo, y va CONTENIDA en la tarjeta (`overflow: hidden`) y lejos del texto: da identidad de color por track sin tocar el contraste. Se apaga con `prefers-reduced-transparency`. Las estadísticas van como tira de iconos (`.track-stat`), no como chips: seis chips de texto pesaban más que el título. Sólo reproducir y añadir a la cola son botones con etiqueta; descargar, compartir y abrir en SoundCloud son `icon-btn` con `title`.
+
 Clases: `btn btn-primary btn-ghost btn-danger btn-sm`, `icon-btn` (+ `.active`), `chip chip.active chip-row`, `card card-pad`, `track-row` (+ `.playing`, con filo de acento a la izquierda), `skeleton`, `empty-state`, `h-display h-section text-dim text-faint text-accent truncate link-hover`, `grid-tracks` (auto-fill minmax 300px), `load-more`, `spinner`, `page-error`, `.input .select .field .field-label`, `.avatar`. De acrylic.css: `glass`, `glass-flat`, `glass-panel`, `on-glass`.
+
+**`--accent` es color de FONDO, nunca de primer plano.** El violeta tiene poca luminancia: como texto o icono sobre cristal oscuro se queda en 2.5–2.9:1, por debajo del 3:1 mínimo para gráficos. Para cualquier cosa que se dibuje SOBRE el fondo (iconos activos, el corazón de «me gusta», el check de verificado) va `--accent-text`, que está calculado para eso en ambos temas. Con el naranja anterior esto no se notaba porque era mucho más claro; al cambiar a violeta hubo que corregir tres sitios.
+
+Las sombras de acento salen de `color-mix(in srgb, var(--accent) N%, transparent)`, no de un `rgb()` fijo: así siguen al tema sin duplicar la regla.
+
+**Nada de degradados de tonos opuestos.** `--accent-grad` va entre dos violetas vecinos (`#7857ff` → `#6344e8`) y AMBOS extremos mantienen el blanco encima por encima de 4.5:1 (4.6 y 6.0). Un degradado que se aclara al final deja el texto blanco en 3:1 justo donde acaba el botón.
+
+### Marca e iconos
+
+La marca son 5 barras simétricas. Hay dos formas y no son intercambiables:
+
+- `ui/logo.ts` → **solo las barras**, `viewBox 0 0 332 332`, `fill="currentColor"`. Es la que se usa dentro de la app (cabecera, puerta de sesión) y por eso se adapta al tema. No lleva el cuadrado: la puerta ya tiene su propio contenedor redondeado y anidar dos era el defecto anterior.
+- `public/icon.svg` + `scripts/gen-icons.mjs` → **icono de sistema**, con el cuadrado de tinta `#0b0b0f` y las barras en blanco puro. Solo para el SO/PWA.
+
+`gen-icons.mjs` pinta a mano el PNG (sin dependencias) con supersampling 4×4: sin él los tamaños pequeños (32 px, favicon) salen con los bordes dentados. `inRoundedRect` necesita el clamp al rectángulo interior — sin él elige la esquina equivocada en las bandas centrales y se come el fondo.
+
+Iconos de interfaz (`ui/el.ts`): trazo `1.75` sobre rejilla 24×24, `currentColor`, extremos redondeados. **Ningún path duplicado**: si dos nombres pintan lo mismo, uno de los dos está mal (pasó con `queue`/`playlist`/`list` y con `repost`/`repeat`). `ICON_PATHS[name] ?? ''` devuelve vacío en silencio, así que borrar una entrada usada no rompe el build: se ve como un hueco. Al tocar el set, comprobar que no quede ningún `svg.icon` sin hijos en la página.
 
 IMPORTANTE: no frameworks, no librerías de UI, no Tailwind. Solo TS vanilla + CSS. No añadir comentarios al código. IDs/nombres de clases en kebab-case.
 

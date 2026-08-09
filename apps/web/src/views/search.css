@@ -124,7 +124,7 @@
   display: inline-block;
   vertical-align: middle;
   margin-left: 6px;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .playlist-row .art-frame {

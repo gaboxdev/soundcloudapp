@@ -1,5 +1,5 @@
 import { register } from '../core/router'
-import { getSettings, updateSettings, type Glass, type Theme } from '../core/settings'
+import { getSettings, updateSettings, type Glass, type Theme, type Topbar } from '../core/settings'
 import { saveHistory, saveLikes } from '../core/library'
 import { player } from '../player/player'
 import { resetAPI } from '../api'
@@ -106,6 +106,49 @@ register('settings', (_route, container) => {
     )
   }
   page.appendChild(glassCard)
+
+  const topbarRow = h('div', { className: 'chip-row' })
+  const topbarValues: { value: Topbar; label: string; hint: string }[] = [
+    { value: 'fija', label: 'Fija', hint: 'La barra superior siempre visible.' },
+    {
+      value: 'auto',
+      label: 'Al desplazar',
+      hint: 'La barra se esconde al bajar y vuelve al subir o al acercar el cursor al borde.',
+    },
+    {
+      value: 'oculta',
+      label: 'Oculta',
+      hint: 'Sin barra: la parte de arriba queda libre y aparece al acercar el cursor al borde superior.',
+    },
+  ]
+  const topbarChips = topbarValues.map(({ value, label }) =>
+    h('button', { className: 'chip', dataset: { topbar: value } }, label),
+  )
+  topbarChips.forEach((chip) => topbarRow.appendChild(chip))
+  const topbarHint = h('p', { className: 'text-faint' })
+  const refreshTopbar = (): void => {
+    const current = getSettings().topbar
+    topbarChips.forEach((chip) => chip.classList.toggle('active', chip.dataset.topbar === current))
+    topbarHint.textContent = topbarValues.find((option) => option.value === current)?.hint ?? ''
+  }
+  refreshTopbar()
+  topbarChips.forEach((chip) => {
+    chip.addEventListener('click', () => {
+      updateSettings({ topbar: chip.dataset.topbar as Topbar })
+      refreshTopbar()
+    })
+  })
+  const topbarCard = settingsCard('Barra superior', [topbarRow, topbarHint])
+  if (desktop) {
+    topbarCard.appendChild(
+      h(
+        'p',
+        { className: 'text-faint' },
+        'Con la barra escondida puedes seguir moviendo la ventana arrastrando el borde de arriba.',
+      ),
+    )
+  }
+  page.appendChild(topbarCard)
 
   const volumeRow = h('div', { className: 'vol-row' })
   const muteBtn = h('button', { className: 'icon-btn', title: 'Silenciar', 'aria-label': 'Silenciar' })

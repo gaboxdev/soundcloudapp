@@ -1,15 +1,21 @@
 import type { Track } from '@soundclear/api'
 import { artworkUrl, initials } from '../core/utils'
+import { svgIcon } from './el'
 
 export interface ArtworkOptions {
   size?: string
   title?: string
-  blur?: boolean
+  href?: string
 }
 
 export function artEl(url: string | null, label: string, opts: ArtworkOptions = {}): HTMLElement {
-  const frame = document.createElement('div')
+  const frame = document.createElement(opts.href ? 'a' : 'div')
   frame.className = 'art-frame'
+  if (opts.href) {
+    ;(frame as HTMLAnchorElement).href = opts.href
+    frame.classList.add('art-open')
+  }
+  if (opts.title) frame.title = opts.title
   const fallback = document.createElement('div')
   fallback.className = 'art-fallback'
   fallback.textContent = initials(label)
@@ -19,13 +25,19 @@ export function artEl(url: string | null, label: string, opts: ArtworkOptions = 
     const img = new Image()
     img.loading = 'lazy'
     img.decoding = 'async'
-    if (opts.blur) img.classList.add('art-blur')
     img.alt = ''
     img.addEventListener('load', () => img.classList.add('loaded'))
     img.src = src
     frame.appendChild(img)
   }
   return frame
+}
+
+export function artOverlay(icon = 'expand', size = 18): HTMLElement {
+  const overlay = document.createElement('div')
+  overlay.className = 'art-overlay'
+  overlay.innerHTML = svgIcon(icon, size)
+  return overlay
 }
 
 export function avatarEl(url: string | null, label: string, size = 40): HTMLElement {

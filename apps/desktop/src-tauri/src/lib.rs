@@ -427,11 +427,11 @@ function show(){
 var host=window.location.hostname;
 if(HOSTS.indexOf(host)===-1)return;
 var el=document.createElement("div");
-el.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;background:#18181b;color:#f4f4f6;border:1px solid #ff5500;border-radius:10px;padding:10px 14px;font:13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.45);display:flex;align-items:center;gap:10px;";
+el.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;background:#18181b;color:#f4f4f6;border:1px solid #7857ff;border-radius:10px;padding:10px 14px;font:13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.45);display:flex;align-items:center;gap:10px;";
 el.innerHTML="Los passkeys no funcionan dentro de la app (limitación del sistema). Usa la opción de <strong>contraseña</strong> o <em>otras opciones</em> para iniciar sesión.";
 var btn=document.createElement("button");
 btn.textContent="Entendido";
-btn.style.cssText="flex-shrink:0;background:#ff5500;color:#fff;border:none;border-radius:999px;padding:5px 12px;font:600 12px -apple-system,sans-serif;cursor:pointer;";
+btn.style.cssText="flex-shrink:0;background:#7857ff;color:#fff;border:none;border-radius:999px;padding:5px 12px;font:600 12px -apple-system,sans-serif;cursor:pointer;";
 btn.onclick=function(){try{sessionStorage.setItem(KEY,"1");}catch(e){}el.remove();};
 el.appendChild(btn);
 document.documentElement.appendChild(el);
@@ -493,11 +493,11 @@ var KEY="sl_login_close_hint";
 var tip=path.indexOf("login")!==-1||path.indexOf("sign")!==-1;
 if(tip&&!sessionStorage.getItem("sl_login_tip")){{
 var el=document.createElement("div");
-el.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;background:#18181b;color:#f4f4f6;border:1px solid #ff5500;border-radius:10px;padding:10px 14px;font:13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.45);display:flex;align-items:center;gap:10px;";
+el.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;background:#18181b;color:#f4f4f6;border:1px solid #7857ff;border-radius:10px;padding:10px 14px;font:13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.45);display:flex;align-items:center;gap:10px;";
 el.innerHTML="Para entrar con Google o Apple puede pedirte un <strong>passkey</strong>, que no funciona en esta app. Usa <strong>email + contraseña</strong> (o «usar otra contraseña» en Google).";
 var btn=document.createElement("button");
 btn.textContent="Entendido";
-btn.style.cssText="flex-shrink:0;background:#ff5500;color:#fff;border:none;border-radius:999px;padding:5px 12px;font:600 12px -apple-system,sans-serif;cursor:pointer;";
+btn.style.cssText="flex-shrink:0;background:#7857ff;color:#fff;border:none;border-radius:999px;padding:5px 12px;font:600 12px -apple-system,sans-serif;cursor:pointer;";
 btn.onclick=function(){{try{{sessionStorage.setItem("sl_login_tip","1");}}catch(e){{}}el.remove();}};
 el.appendChild(btn);
 document.documentElement.appendChild(el);
@@ -516,7 +516,7 @@ el2.appendChild(btn2);
 document.documentElement.appendChild(el2);
 var contBtn=document.createElement("button");
 contBtn.textContent="He iniciado sesión · Continuar →";
-contBtn.style.cssText="position:fixed;right:14px;top:14px;z-index:2147483646;background:linear-gradient(135deg,#ff5500,#ff2d78);color:#fff;border:none;border-radius:999px;padding:10px 16px;font:600 13px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.4);";
+contBtn.style.cssText="position:fixed;right:14px;top:14px;z-index:2147483646;background:linear-gradient(135deg,#7857ff,#6344e8);color:#fff;border:none;border-radius:999px;padding:10px 16px;font:600 13px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.4);";
 contBtn.onclick=function(){{
 try{{sessionStorage.setItem(KEY,"1");}}catch(e){{}}
 if(window.__slSucceed){{window.__slSucceed();}}

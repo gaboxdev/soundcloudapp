@@ -2,7 +2,7 @@ import type { User } from '@soundclear/api'
 import { getAPI } from '../api'
 import { link } from '../core/router'
 import { fmtTime } from '../core/utils'
-import { artEl } from '../ui/artwork'
+import { artEl, artOverlay } from '../ui/artwork'
 import { h, svgIcon } from '../ui/el'
 import { appLogo } from '../ui/logo'
 import { toast } from '../ui/toast'
@@ -25,7 +25,7 @@ export function renderPlayerBar(): HTMLElement {
   const grid = h('div', { className: 'player-grid' })
 
   const nowWrap = h('div', { className: 'now' })
-  const nowArt = h('div', { className: 'art' })
+  const nowArt = h('a', { className: 'art' })
   nowArt.innerHTML = appLogo(48)
   const nowMeta = h('div', { className: 'meta' })
   const nowTitle = h('a', { className: 'title truncate', style: { fontSize: '13px', fontWeight: 700 } })
@@ -96,6 +96,9 @@ export function renderPlayerBar(): HTMLElement {
     playBtn.innerHTML = svgIcon(playing ? 'pause' : 'play', 20)
     if (!current) {
       nowArt.innerHTML = appLogo(48)
+      nowArt.classList.remove('art-open')
+      nowArt.removeAttribute('href')
+      nowArt.removeAttribute('title')
       nowTitle.removeAttribute('href')
       nowTitle.textContent = 'Sin reproducción'
       nowArtist.removeAttribute('href')
@@ -107,6 +110,10 @@ export function renderPlayerBar(): HTMLElement {
     if (nowTitle.textContent !== current.title) {
       const user = current.user as User | undefined
       nowArt.replaceChildren(...artEl(current.artwork_url, current.title, { size: 't120x120' }).children)
+      nowArt.appendChild(artOverlay('expand', 16))
+      nowArt.classList.add('art-open')
+      nowArt.href = link(`/track/${current.id}`)
+      nowArt.title = `Abrir «${current.title}»`
       nowTitle.href = link(`/track/${current.id}`)
       nowTitle.textContent = current.title
       if (user) nowArtist.href = link(`/user/${user.id}`)

@@ -93,7 +93,7 @@
 
 .profile-name .verified {
   display: inline-flex;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .profile-fullname {

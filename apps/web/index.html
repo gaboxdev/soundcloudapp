@@ -17,6 +17,9 @@
           var glass = saved && saved.glass
           document.documentElement.dataset.glass =
             glass === 'cristal' || glass === 'solido' ? glass : 'equilibrado'
+          var topbar = saved && saved.topbar
+          document.documentElement.dataset.topbar =
+            topbar === 'auto' || topbar === 'oculta' ? topbar : 'fija'
           if ('__TAURI_INTERNALS__' in window) {
             document.documentElement.dataset.backdrop = 'system'
             document.documentElement.dataset.shell = 'desktop'

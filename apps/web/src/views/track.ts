@@ -2,10 +2,10 @@ import type { Comment, Track, User } from '@soundclear/api'
 import { getAPI } from '../api'
 import { skeletonRows, trackRow } from '../components/trackrow'
 import { link, register } from '../core/router'
-import { fmtCount, fmtTime, formatDate, timeAgo } from '../core/utils'
+import { artworkUrl, fmtCount, fmtTime, formatDate, timeAgo } from '../core/utils'
 import type { PlayerState } from '../player/player'
 import { player } from '../player/player'
-import { artEl, avatarEl } from '../ui/artwork'
+import { artEl, artOverlay, avatarEl } from '../ui/artwork'
 import { h, iconEl, svgIcon } from '../ui/el'
 import { toast, toastErr } from '../ui/toast'
 import { waveformEl } from '../ui/waveform'
@@ -40,16 +40,18 @@ function errorView(message: string, onRetry?: () => void): HTMLElement {
 
 function skeletonView(): HTMLElement {
   const wrap = h('div', { className: 'track-skeleton' })
-  const header = h('div', { className: 'track-header' })
-  header.appendChild(h('div', { className: 'skeleton sk-art-big' }))
+  const hero = h('div', { className: 'card card-pad track-hero' })
+  const artCol = h('div', { className: 'track-art-col' })
+  artCol.appendChild(h('div', { className: 'skeleton sk-art-big' }))
+  hero.appendChild(artCol)
   const info = h('div', { className: 'track-info' })
+  info.appendChild(h('div', { className: 'skeleton sk-chips' }))
   info.appendChild(h('div', { className: 'skeleton sk-line', style: { width: '70%', height: '30px' } }))
   info.appendChild(h('div', { className: 'skeleton sk-line', style: { width: '38%' } }))
-  info.appendChild(h('div', { className: 'skeleton sk-chips' }))
   info.appendChild(h('div', { className: 'skeleton sk-line', style: { width: '56%' } }))
   info.appendChild(h('div', { className: 'skeleton sk-actions' }))
-  header.appendChild(info)
-  wrap.appendChild(header)
+  hero.appendChild(info)
+  wrap.appendChild(hero)
   wrap.appendChild(h('div', { className: 'skeleton sk-wave' }))
   const list = h('div', { className: 'track-list' })
   for (const row of skeletonRows(6)) list.appendChild(row)
@@ -196,49 +198,69 @@ function renderTrack(track: Track, container: HTMLElement): void {
     secondaryArtist.length > 0 &&
     secondaryArtist.toLowerCase() !== (user?.username ?? '').trim().toLowerCase()
 
-  const header = h('div', { className: 'track-header' })
-  const art = artEl(track.artwork_url, track.title, { size: 't500x500', blur: true })
-  art.classList.add('track-art')
-  header.appendChild(art)
+  const hero = h('div', { className: 'card card-pad track-hero' })
+
+  const artCol = h('div', { className: 'track-art-col' })
+  const glowSrc = artworkUrl(track.artwork_url, 't500x500')
+  if (glowSrc) {
+    const glow = h('div', { className: 'track-art-glow' })
+    glow.style.backgroundImage = `url("${glowSrc}")`
+    artCol.appendChild(glow)
+  }
+  const art = artEl(track.artwork_url, track.title, { size: 't500x500' })
+  art.classList.add('track-art', 'art-open')
+  const artPlay = artOverlay('play', 34)
+  art.appendChild(artPlay)
+  art.addEventListener('click', () => togglePlay())
+  artCol.appendChild(art)
+  hero.appendChild(artCol)
 
   const info = h('div', { className: 'track-info' })
-  info.appendChild(h('h1', { className: 'h-display' }, track.title))
-  info.appendChild(
-    user
-      ? h('a', { className: 'artist-link link-hover', href: link(`/user/${user.id}`) }, user.username)
-      : h('span', { className: 'artist-link text-faint' }, 'Artista desconocido'),
-  )
 
-  if (showSecondaryArtist || albumTitle.length > 0) {
-    const credits = h('div', { className: 'track-credits text-dim' })
-    if (showSecondaryArtist) {
-      const line = h('span', { className: 'track-credit' })
-      line.appendChild(iconEl('user', 14))
-      line.appendChild(document.createTextNode(secondaryArtist))
-      credits.appendChild(line)
-    }
-    if (albumTitle.length > 0) {
-      const line = h('span', { className: 'track-credit' })
-      line.appendChild(iconEl('disc', 14))
-      line.appendChild(document.createTextNode(albumTitle))
-      credits.appendChild(line)
-    }
-    info.appendChild(credits)
+  const tags = h('div', { className: 'track-tags' })
+  if (track.genre) tags.appendChild(h('span', { className: 'chip chip-static' }, track.genre))
+  if (track.display_date) tags.appendChild(h('span', { className: 'chip chip-static' }, formatDate(track.display_date)))
+  if (albumTitle.length > 0) {
+    const albumChip = h('span', { className: 'chip chip-static' })
+    albumChip.appendChild(iconEl('disc', 13))
+    albumChip.appendChild(document.createTextNode(albumTitle))
+    tags.appendChild(albumChip)
   }
+  if (tags.childElementCount > 0) info.appendChild(tags)
 
-  const chips = h('div', { className: 'chip-row' })
-  if (track.genre) chips.appendChild(h('span', { className: 'chip chip-static' }, track.genre))
-  if (track.display_date) chips.appendChild(h('span', { className: 'chip chip-static' }, formatDate(track.display_date)))
-  chips.appendChild(h('span', { className: 'chip chip-static' }, `${fmtCount(track.playback_count)} plays`))
-  chips.appendChild(h('span', { className: 'chip chip-static' }, `${fmtCount(track.likes_count)} likes`))
-  chips.appendChild(h('span', { className: 'chip chip-static' }, `${fmtCount(track.comment_count)} comentarios`))
-  chips.appendChild(h('span', { className: 'chip chip-static' }, `${fmtCount(track.reposts_count)} reposts`))
-  info.appendChild(chips)
+  info.appendChild(h('h1', { className: 'h-display track-title' }, track.title))
 
-  if (track.description) info.appendChild(descriptionBlock(track.description))
+  const by = h('div', { className: 'track-by' })
+  if (user) {
+    const artistLink = h('a', { className: 'track-by-link link-hover', href: link(`/user/${user.id}`) })
+    artistLink.appendChild(avatarEl(user.avatar_url, user.username, 30))
+    artistLink.appendChild(h('span', { className: 'truncate' }, user.username))
+    by.appendChild(artistLink)
+  } else {
+    by.appendChild(h('span', { className: 'track-by-link text-faint' }, 'Artista desconocido'))
+  }
+  if (showSecondaryArtist) {
+    by.appendChild(h('span', { className: 'track-dot' }, '·'))
+    by.appendChild(h('span', { className: 'text-dim truncate' }, secondaryArtist))
+  }
+  info.appendChild(by)
+
+  const stats = h('div', { className: 'track-stats' })
+  const statEl = (icon: string, value: string, label: string): HTMLElement => {
+    const item = h('span', { className: 'track-stat', title: label })
+    item.appendChild(iconEl(icon, 15))
+    item.appendChild(h('span', null, value))
+    return item
+  }
+  stats.appendChild(statEl('play', fmtCount(track.playback_count), 'Reproducciones'))
+  stats.appendChild(statEl('heart', fmtCount(track.likes_count), 'Favoritos'))
+  stats.appendChild(statEl('comment', fmtCount(track.comment_count), 'Comentarios'))
+  stats.appendChild(statEl('repost', fmtCount(track.reposts_count), 'Reposts'))
+  stats.appendChild(statEl('clock', fmtTime(snip.timelineMs), 'Duración'))
+  info.appendChild(stats)
 
   const actions = h('div', { className: 'track-actions' })
-  const playBtn = h('button', { className: 'btn btn-primary' })
+  const playBtn = h('button', { className: 'btn btn-primary track-play' })
   const playIcon = h('span')
   const playLabel = h('span')
   playBtn.appendChild(playIcon)
@@ -259,10 +281,11 @@ function renderTrack(track: Track, container: HTMLElement): void {
   if (track.downloadable) {
     const exhausted = track.has_downloads_left === false
     const dlBtn = h('button', {
-      className: 'btn btn-ghost',
+      className: 'icon-btn',
       title: exhausted ? 'El artista agotó el cupo de descargas' : 'Descargar el archivo original',
+      'aria-label': 'Descargar',
     })
-    dlBtn.innerHTML = `${svgIcon('download', 18)}<span>Descargar</span>`
+    dlBtn.innerHTML = svgIcon('download', 19)
     if (exhausted) {
       dlBtn.setAttribute('disabled', 'true')
     } else {
@@ -272,27 +295,32 @@ function renderTrack(track: Track, container: HTMLElement): void {
   }
 
   if (track.permalink_url) {
-    const shareBtn = h('button', { className: 'btn btn-ghost', title: 'Copiar el enlace del track' })
-    shareBtn.innerHTML = `${svgIcon('link', 18)}<span>Compartir</span>`
+    const shareBtn = h('button', {
+      className: 'icon-btn',
+      title: 'Copiar el enlace del track',
+      'aria-label': 'Compartir',
+    })
+    shareBtn.innerHTML = svgIcon('link', 19)
     shareBtn.addEventListener('click', () => void share())
     actions.appendChild(shareBtn)
 
     const openLink = h('a', {
-      className: 'btn btn-ghost',
+      className: 'icon-btn',
       href: track.permalink_url,
       target: '_blank',
       rel: 'noopener noreferrer',
       title: 'Abrir en SoundCloud',
+      'aria-label': 'Abrir en SoundCloud',
     })
-    openLink.innerHTML = `${svgIcon('external', 18)}<span>Abrir en SoundCloud</span>`
+    openLink.innerHTML = svgIcon('external', 19)
     actions.appendChild(openLink)
   }
 
   info.appendChild(actions)
-  header.appendChild(info)
-  container.appendChild(header)
+  hero.appendChild(info)
+  container.appendChild(hero)
 
-  const waveBlock = h('div', { className: 'track-wave' })
+  const waveBlock = h('div', { className: 'card card-pad track-wave' })
   const waveBox = h('div', { className: 'track-wave-box' })
   const wave = waveformEl({
     interactive: true,
@@ -314,6 +342,12 @@ function renderTrack(track: Track, container: HTMLElement): void {
     waveBox.appendChild(edge)
   }
   waveBlock.appendChild(waveBox)
+  const waveTimes = h('div', { className: 'track-wave-times' })
+  const timeNow = h('span', { className: 'track-time' }, '0:00')
+  const timeTotal = h('span', { className: 'track-time' }, fmtTime(snip.timelineMs))
+  waveTimes.appendChild(timeNow)
+  waveTimes.appendChild(timeTotal)
+  waveBlock.appendChild(waveTimes)
   if (snip.snipped) {
     const note = h('div', { className: 'text-accent track-snip' })
     note.appendChild(iconEl('info', 15))
@@ -327,6 +361,16 @@ function renderTrack(track: Track, container: HTMLElement): void {
     waveBlock.appendChild(note)
   }
   container.appendChild(waveBlock)
+
+  if (track.description) {
+    const descCard = h('div', { className: 'card card-pad track-desc-card' })
+    const descTitle = h('h2', { className: 'h-section' })
+    descTitle.appendChild(iconEl('info', 18))
+    descTitle.appendChild(document.createTextNode('Sobre este track'))
+    descCard.appendChild(descTitle)
+    descCard.appendChild(descriptionBlock(track.description))
+    container.appendChild(descCard)
+  }
 
   function currentRatio(state: PlayerState): number {
     if (state.current?.id !== track.id) return 0
@@ -404,12 +448,21 @@ function renderTrack(track: Track, container: HTMLElement): void {
     await playAt(ms)
   }
 
+  function togglePlay(): void {
+    const state = player.store.get()
+    if (state.current?.id === track.id) player.toggle()
+    else void player.playTrack(track)
+  }
+
   const renderPlay = (): void => {
     const state = player.store.get()
     const isCurrent = state.current?.id === track.id
     const playing = isCurrent && state.playing
     playIcon.innerHTML = svgIcon(playing ? 'pause' : 'play', 18)
     playLabel.textContent = playing ? 'Pausar' : 'Reproducir'
+    artPlay.innerHTML = svgIcon(playing ? 'pause' : 'play', 34)
+    art.title = playing ? 'Pausar' : `Reproducir «${track.title}»`
+    timeNow.textContent = fmtTime(isCurrent ? state.progress : 0)
   }
   const renderLike = (): void => {
     const liked = player.isLiked(track)
@@ -420,11 +473,7 @@ function renderTrack(track: Track, container: HTMLElement): void {
   renderPlay()
   renderLike()
 
-  playBtn.addEventListener('click', () => {
-    const state = player.store.get()
-    if (state.current?.id === track.id) player.toggle()
-    else void player.playTrack(track)
-  })
+  playBtn.addEventListener('click', () => togglePlay())
   likeBtn.addEventListener('click', () => {
     player.toggleLike(track)
     toast(player.isLiked(track) ? 'Guardado en favoritos' : 'Quitado de favoritos', 'ok')

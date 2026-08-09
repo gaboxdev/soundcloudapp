@@ -2,7 +2,7 @@ import type { Track, TrackStub, User } from '@soundclear/api'
 import { isTrackStub } from '@soundclear/api'
 import type { PlayerState } from '../player/player'
 import { player } from '../player/player'
-import { artEl } from '../ui/artwork'
+import { artEl, artOverlay } from '../ui/artwork'
 import { link } from '../core/router'
 import { fmtCount, fmtTime } from '../core/utils'
 import { h, svgIcon } from '../ui/el'
@@ -94,12 +94,13 @@ export function trackRow(track: Track | TrackStub, opts: TrackRowOptions = {}): 
     row.appendChild(rank)
   }
 
-  const art = artEl(track.artwork_url, track.title, { size: 't120x120' })
+  const art = artEl(track.artwork_url, track.title, {
+    size: 't120x120',
+    href: link(`/track/${track.id}`),
+    title: `Abrir «${track.title}»`,
+  })
   art.classList.add('art')
-  const overlay = document.createElement('div')
-  overlay.className = 'play-overlay'
-  overlay.innerHTML = svgIcon('play', 20)
-  art.appendChild(overlay)
+  art.appendChild(artOverlay('expand', 18))
   row.appendChild(art)
 
   const meta = h('div', { className: 'meta' })

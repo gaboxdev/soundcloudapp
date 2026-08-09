@@ -2,23 +2,28 @@ export type Theme = 'dark' | 'light' | 'system'
 
 export type Glass = 'cristal' | 'equilibrado' | 'solido'
 
+export type Topbar = 'fija' | 'auto' | 'oculta'
+
 export interface Settings {
   version: number
   theme: Theme
   glass: Glass
+  topbar: Topbar
   apiBase: string
   volume: number
 }
 
 const KEY = 'sl:settings'
-const VERSION = 3
+const VERSION = 4
 const THEMES: readonly string[] = ['dark', 'light', 'system']
 const GLASSES: readonly string[] = ['cristal', 'equilibrado', 'solido']
+const TOPBARS: readonly string[] = ['fija', 'auto', 'oculta']
 
 const defaults: Settings = {
   version: VERSION,
   theme: 'dark',
   glass: 'equilibrado',
+  topbar: 'fija',
   apiBase: '',
   volume: 0.9,
 }
@@ -33,6 +38,10 @@ function isTheme(value: unknown): value is Theme {
 
 function isGlass(value: unknown): value is Glass {
   return typeof value === 'string' && GLASSES.includes(value)
+}
+
+function isTopbar(value: unknown): value is Topbar {
+  return typeof value === 'string' && TOPBARS.includes(value)
 }
 
 function normalizeVolume(value: unknown): number {
@@ -59,6 +68,7 @@ function sanitize(input: unknown): Settings {
     version: VERSION,
     theme: isTheme(source.theme) ? source.theme : defaults.theme,
     glass: isGlass(source.glass) ? source.glass : defaults.glass,
+    topbar: isTopbar(source.topbar) ? source.topbar : defaults.topbar,
     apiBase: normalizeApiBase(source.apiBase),
     volume: normalizeVolume(source.volume),
   }
@@ -110,6 +120,7 @@ export function initSettings(): Settings {
   settings = load()
   applyTheme(settings.theme)
   applyGlass(settings.glass)
+  applyTopbar(settings.topbar)
   return settings
 }
 
@@ -124,6 +135,7 @@ export function updateSettings(patch: Partial<Settings>): Settings {
   persist(settings)
   if (patch.theme !== undefined) applyTheme(settings.theme)
   if (patch.glass !== undefined) applyGlass(settings.glass)
+  if (patch.topbar !== undefined) applyTopbar(settings.topbar)
   return settings
 }
 
@@ -142,9 +154,14 @@ export function applyGlass(glass: Glass): void {
   document.documentElement.dataset.glass = glass
 }
 
+export function applyTopbar(topbar: Topbar): void {
+  document.documentElement.dataset.topbar = topbar
+}
+
 export function resetSettings(): void {
   settings = { ...defaults }
   clearStored()
   applyTheme(settings.theme)
   applyGlass(settings.glass)
+  applyTopbar(settings.topbar)
 }

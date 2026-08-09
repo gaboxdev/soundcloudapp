@@ -108,7 +108,7 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(80vw 70vh at 12% -10%, rgb(255 85 0 / 0.28), transparent 62%),
+    radial-gradient(80vw 70vh at 12% -10%, color-mix(in srgb, var(--accent) 28%, transparent), transparent 62%),
     radial-gradient(70vw 60vh at 92% 8%, rgb(255 45 120 / 0.2), transparent 60%),
     radial-gradient(90vw 80vh at 50% 118%, rgb(90 60 220 / 0.18), transparent 66%);
   opacity: 1;

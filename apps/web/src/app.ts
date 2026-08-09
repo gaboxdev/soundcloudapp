@@ -4,6 +4,7 @@ import { renderPlayerBar } from './components/playerbar'
 import { renderLoginGate } from './components/logingate'
 import { refreshAccount, watchSessionWindow } from './core/account'
 import { mountAmbient } from './ui/ambient'
+import { mountTopbar } from './ui/topbar'
 import { player } from './player/player'
 
 let initialized = false
@@ -17,7 +18,9 @@ export function bootstrapApp(): void {
 
   mountAmbient()
 
-  app.appendChild(renderHeader())
+  const header = renderHeader()
+  app.appendChild(header)
+  app.appendChild(mountTopbar(header))
 
   const main = document.createElement('main')
   main.className = 'app-main'

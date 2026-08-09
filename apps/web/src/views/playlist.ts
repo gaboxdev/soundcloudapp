@@ -144,7 +144,7 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
   const unavailable = new Set<number>()
 
   const header = h('div', { className: 'card card-pad playlist-header' })
-  const art = artEl(p.artwork_url, p.title, { size: 't500x500', blur: true })
+  const art = artEl(p.artwork_url, p.title, { size: 't500x500' })
   art.classList.add('playlist-art')
   header.appendChild(art)
 

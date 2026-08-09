@@ -5,7 +5,7 @@ import { skeletonRows, trackRow } from '../components/trackrow'
 import { link, register } from '../core/router'
 import { fmtCount, fmtTime } from '../core/utils'
 import { player } from '../player/player'
-import { artEl } from '../ui/artwork'
+import { artEl, artOverlay } from '../ui/artwork'
 import { h, iconEl, svgIcon } from '../ui/el'
 import { toast } from '../ui/toast'
 import './home.css'
@@ -106,8 +106,13 @@ register('home', (_route, container) => {
   }
 
   function heroEl(track: Track, queue: Track[]): HTMLElement {
-    const art = artEl(track.artwork_url, track.title, { size: 't500x500', blur: true })
+    const art = artEl(track.artwork_url, track.title, {
+      size: 't500x500',
+      href: link(`/track/${track.id}`),
+      title: `Abrir «${track.title}»`,
+    })
     art.classList.add('hero-art')
+    art.appendChild(artOverlay('expand', 22))
 
     const fav = h('button', { className: 'icon-btn' })
     const paintLike = (liked: boolean): void => {

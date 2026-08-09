@@ -29,6 +29,9 @@ export interface PlayerState {
 }
 
 const QUEUE_KEY = 'sl:player:queue'
+const RESUME_MIN_MS = 5000
+const RESUME_TAIL_S = 5
+const PROGRESS_SAVE_MS = 5000
 const LIKES_TTL = 5 * 60 * 1000
 const LIKES_PAGE_SIZE = 100
 const LIKES_MAX_PAGES = 500
@@ -38,6 +41,8 @@ interface PersistedPlayer {
   index: number
   repeat: PlayerState['repeat']
   shuffle: boolean
+  trackId: number | null
+  progress: number
 }
 
 function loadPersisted(): PersistedPlayer | null {
@@ -59,6 +64,8 @@ function persist(state: PlayerState): void {
         index: state.index,
         repeat: state.repeat,
         shuffle: state.shuffle,
+        trackId: state.current?.id ?? null,
+        progress: state.progress,
       } satisfies PersistedPlayer),
     )
   } catch {
@@ -77,6 +84,8 @@ class Player {
   private likesSync: Promise<void> | null = null
   private likesSyncedFor: number | null = null
   private likesSyncedAt = 0
+  private pendingResume: { trackId: number; progress: number } | null = null
+  private lastProgressSave = 0
 
   constructor() {
     const persisted = loadPersisted()
@@ -84,6 +93,11 @@ class Player {
     const history = loadHistory()
     const volume = getSettings().volume
     const restored = persisted?.queue && persisted.index >= 0 ? persisted.queue[persisted.index] ?? null : null
+    const resumeMs =
+      restored && persisted?.trackId === restored.id && (persisted.progress ?? 0) >= RESUME_MIN_MS
+        ? persisted.progress
+        : 0
+    if (restored && resumeMs > 0) this.pendingResume = { trackId: restored.id, progress: resumeMs }
 
     this.store = createStore<PlayerState>({
       queue: persisted?.queue ?? [],
@@ -95,7 +109,7 @@ class Player {
       muted: volume === 0,
       current: restored,
       duration: 0,
-      progress: 0,
+      progress: resumeMs,
       buffered: 0,
       loading: false,
       error: null,
@@ -146,6 +160,7 @@ class Player {
       this.seekRaf = requestAnimationFrame(() => {
         this.store.set({ progress: audio.currentTime * 1000 })
         this.updatePositionState()
+        this.saveProgressThrottled()
       })
     })
 
@@ -170,6 +185,7 @@ class Player {
     audio.addEventListener('pause', () => {
       this.store.set({ playing: false })
       this.updatePlaybackState()
+      this.savePlayback()
     })
     audio.addEventListener('play', () => {
       this.store.set({ playing: true })
@@ -195,6 +211,43 @@ class Player {
         }
       }
     })
+
+    window.addEventListener('pagehide', () => this.savePlayback())
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') this.savePlayback()
+    })
+  }
+
+  private savePlayback(): void {
+    if (this.state.current && this.hasSource()) {
+      const seconds = this.audio.currentTime
+      if (Number.isFinite(seconds) && seconds > 0) this.store.set({ progress: seconds * 1000 })
+    }
+    this.lastProgressSave = Date.now()
+    persist(this.state)
+  }
+
+  private saveProgressThrottled(): void {
+    const now = Date.now()
+    if (now - this.lastProgressSave < PROGRESS_SAVE_MS) return
+    this.lastProgressSave = now
+    persist(this.state)
+  }
+
+  private applyPendingSeek(track: Track, resumeMs: number): void {
+    if (resumeMs <= 0) return
+    const audio = this.audio
+    const seek = (): void => {
+      if (this.state.current?.id !== track.id) return
+      const seconds = resumeMs / 1000
+      const duration = audio.duration
+      if (Number.isFinite(duration) && duration > 0 && seconds >= duration - RESUME_TAIL_S) return
+      audio.currentTime = seconds
+      this.store.set({ progress: seconds * 1000 })
+      this.updatePositionState()
+    }
+    if (audio.readyState >= 1) seek()
+    else audio.addEventListener('loadedmetadata', seek, { once: true })
   }
 
   private bindMediaSession(): void {
@@ -305,12 +358,12 @@ class Player {
     this.playQueue(tracks, 0)
   }
 
-  private setCurrent(track: Track): void {
+  private setCurrent(track: Track, startAt = 0): void {
     const state = this.state
     this.store.set({
       current: track,
       error: null,
-      progress: 0,
+      progress: startAt,
       duration: 0,
       buffered: 0,
       isLiked: state.likes.some((t) => t.id === track.id),
@@ -320,7 +373,9 @@ class Player {
 
   private async loadAndPlay(track: Track): Promise<void> {
     const previous = this.state.current
-    this.setCurrent(track)
+    const resumeMs = this.pendingResume?.trackId === track.id ? this.pendingResume.progress : 0
+    this.pendingResume = null
+    this.setCurrent(track, resumeMs)
     this.store.set({ loading: true, playing: false })
     if (previous?.id !== track.id) {
       this.pushHistory(track)
@@ -339,6 +394,7 @@ class Player {
       } else {
         this.audio.src = target.url
       }
+      this.applyPendingSeek(track, resumeMs)
       try {
         await this.audio.play()
       } catch {

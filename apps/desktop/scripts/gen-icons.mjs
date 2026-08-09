@@ -2,12 +2,12 @@ import { deflateSync } from 'node:zlib'
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
-const BG = [15, 15, 16]
-const C1 = [255, 85, 0]
-const C2 = [255, 45, 120]
-const BAR_W = 0.076
-const BAR_GAP = 0.051
-const BAR_HEIGHTS = [0.199, 0.34, 0.461, 0.34, 0.199]
+const BG = [11, 11, 15]
+const MARK = [255, 255, 255]
+const BAR_W = 0.0859375
+const BAR_GAP = 0.0546875
+const BAR_HEIGHTS = [0.203125, 0.40625, 0.609375, 0.40625, 0.203125]
+const SUPERSAMPLE = 4
 
 function crc32(buf) {
   let crc = 0xffffffff
@@ -37,18 +37,6 @@ function inRoundedRect(x, y, size, radius) {
   return dx * dx + dy * dy <= radius * radius
 }
 
-function lerp(a, b, t) {
-  return [
-    Math.round(a[0] + (b[0] - a[0]) * t),
-    Math.round(a[1] + (b[1] - a[1]) * t),
-    Math.round(a[2] + (b[2] - a[2]) * t),
-  ]
-}
-
-function dist(x1, y1, x2, y2) {
-  return Math.hypot(x1 - x2, y1 - y2)
-}
-
 function inPill(px, py, x0, x1, y0, y1, r) {
   const cx = (x0 + x1) / 2
   const dx = px - cx
@@ -60,39 +48,48 @@ function inPill(px, py, x0, x1, y0, y1, r) {
 }
 
 function render(size) {
-  const radius = Math.round(size * 0.219)
+  const radius = size * 0.219
   const barW = size * BAR_W
   const barGap = size * BAR_GAP
   const total = BAR_HEIGHTS.length * barW + (BAR_HEIGHTS.length - 1) * barGap
   const barStart = (size - total) / 2
   const mid = size / 2
-  const glowR = size * 0.5
+  const step = 1 / SUPERSAMPLE
+  const first = step / 2
+  const perPixel = SUPERSAMPLE * SUPERSAMPLE
+
+  const bars = BAR_HEIGHTS.map((height, index) => {
+    const x0 = barStart + index * (barW + barGap)
+    const barH = height * size
+    return { x0, x1: x0 + barW, y0: mid - barH / 2, y1: mid + barH / 2, r: barW / 2 }
+  })
 
   const raw = Buffer.alloc(size * size * 4)
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const i = (y * size + x) * 4
-      if (!inRoundedRect(x, y, size, radius)) continue
-      const glow = 1 - dist(x, y, mid, mid) / glowR
-      const base = glow > 0 ? lerp(BG, C1, 0.14 * glow * glow) : BG
-      let r = base[0]
-      let g = base[1]
-      let b = base[2]
-      for (let bar = 0; bar < BAR_HEIGHTS.length; bar++) {
-        const x0 = barStart + bar * (barW + barGap)
-        const barH = BAR_HEIGHTS[bar] * size
-        if (inPill(x, y, x0, x0 + barW, mid - barH / 2, mid + barH / 2, barW / 2)) {
-          const color = lerp(C1, C2, bar / (BAR_HEIGHTS.length - 1))
-          r = color[0]
-          g = color[1]
-          b = color[2]
-          break
+      let inside = 0
+      let onBar = 0
+      for (let sy = 0; sy < SUPERSAMPLE; sy++) {
+        const py = y + first + sy * step
+        for (let sx = 0; sx < SUPERSAMPLE; sx++) {
+          const px = x + first + sx * step
+          if (!inRoundedRect(px, py, size, radius)) continue
+          inside++
+          for (const bar of bars) {
+            if (inPill(px, py, bar.x0, bar.x1, bar.y0, bar.y1, bar.r)) {
+              onBar++
+              break
+            }
+          }
         }
       }
-      raw[i] = r
-      raw[i + 1] = g
-      raw[i + 2] = b
-      raw[i + 3] = 255
+      if (inside === 0) continue
+      const t = onBar / inside
+      const i = (y * size + x) * 4
+      raw[i] = Math.round(BG[0] + (MARK[0] - BG[0]) * t)
+      raw[i + 1] = Math.round(BG[1] + (MARK[1] - BG[1]) * t)
+      raw[i + 2] = Math.round(BG[2] + (MARK[2] - BG[2]) * t)
+      raw[i + 3] = Math.round((inside / perPixel) * 255)
     }
   }
   return raw
