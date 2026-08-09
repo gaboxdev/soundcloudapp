@@ -31,15 +31,25 @@ api-v2.soundcloud.com bloquea CORS para todo origen que no sea soundcloud.com. E
 
 Los medios (CDN mp3 `cf-media.sndcdn.com`, waveforms `wave.sndcdn.com`) sí envían `Access-Control-Allow-Origin: *` — se fetch directo desde el navegador.
 
+### Sesión de cuenta (solo desktop)
+
+SoundCloud no permite registrar apps OAuth nuevas → la sesión se hace con el login nativo de soundcloud.com dentro de la webview de Tauri (cookies compartidas entre ventanas del mismo data store). Comandos Rust en `apps/desktop/src-tauri/src/lib.rs`:
+
+- `login_window` / `logout_window`: abren una ventana con soundcloud.com / soundcloud.com/logout.
+- `authed_request(method, url, body)`: webview oculta `sl-bridge` cargada en `soundcloud.com/robots.txt` (mismo origen → envía cookies y el CORS de la API la permite). Ejecuta `fetch` con `credentials: 'include'` y devuelve el resultado navegando a `tauri://localhost/auth-bridge?status=..&body=..` (se captura con `on_page_load` y se resuelve con oneshot). El cliente TS parsea `"status\nbody"`.
+
+En web (`ProxyTransport`) `authedRequest` lanza error → las vistas deben comprobar `isDesktop()` (`apps/web/src/api/auth.ts`) antes de ofrecer login.
+
 ### Core (`@soundlite/api`)
 
-- `Transport` (interfaz): `getClientId()`, `getJSON(url)`, `rewriteHref(href)`. Implementaciones: `ProxyTransport(base)`, `TauriTransport`.
+- `Transport` (interfaz): `getClientId()`, `getJSON(url)`, `rewriteHref(href)`, `authedRequest(method, url, body?)` (solo Tauri; en web lanza error). Implementaciones: `ProxyTransport(base)`, `TauriTransport`.
 - `SoundCloudAPI` (instancia única vía `getAPI()` en `apps/web/src/api/index.ts`):
   - `search(q, offset, limit, filters)` → `SearchResponse<Searchable>` (colección heterogénea: tracks/playlists/users, filtrar por `.kind`)
   - `searchSuggestions(q)`, `track(id)`, `trackComments(id)`, `trackRelated(id)`, `playlist(id)`, `user(id)`, `userContent(id, kind)`, `charts(genreUrn, kind, offset)`, `featured(genre)`, `mixedSelections()`, `resolve(url)`, `page<T>(href)` (next_href ya reescrito por el transport)
   - `streamUrl(track)` → `{ url, protocol, mimeType, snipped } | null` (progressive MP3; fallback HLS)
   - `waveformSamples(track)` → `number[] | null` (fetch directo)
   - `downloadUrl(track)` → string | null (solo si `track.downloadable`)
+  - `me()` → `User | null` (autenticado, desktop), `meLikes(offset, limit)` → `SearchResponse<Searchable>`, `toggleAccountLike(trackId, liked)` (PUT/DELETE `/me/likes/{id}`)
 - Tipos: `Track`, `Playlist`, `User`, `Comment`, `ChartItem`, `SearchResponse<T>`, `Selection` (mixed-selections), `TrackStub` (tracks borrados dentro de playlists: `typeof t.title !== 'string'`).
 - Gotchas verificados:
   - `artwork_url` es `null` ~34% de las veces → SIEMPRE fallback con iniciales.

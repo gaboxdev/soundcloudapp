@@ -2,9 +2,12 @@ import { register } from '../core/router'
 import { getSettings, updateSettings, type Theme } from '../core/settings'
 import { saveHistory, saveLikes } from '../core/library'
 import { player } from '../player/player'
-import { resetAPI } from '../api'
+import { resetAPI, getAPI } from '../api'
+import { desktopInvoke, isDesktop } from '../api/auth'
+import type { User } from '@soundlite/api'
+import { avatarEl } from '../ui/artwork'
 import { h, iconEl, svgIcon } from '../ui/el'
-import { toast } from '../ui/toast'
+import { toast, toastErr } from '../ui/toast'
 import './views.css'
 
 function settingsCard(title: string, children: HTMLElement[]): HTMLElement {
@@ -64,6 +67,66 @@ register('settings', (_route, container) => {
   syncVolume(player.store.get().volume)
   volumeSlider.addEventListener('input', () => player.setVolume(parseFloat(volumeSlider.value)))
   page.appendChild(settingsCard('Volumen', [volumeRow]))
+
+  const accountCard = settingsCard('Cuenta', [])
+  page.appendChild(accountCard)
+
+  if (!isDesktop()) {
+    accountCard.appendChild(
+      h(
+        'p',
+        { className: 'text-faint' },
+        'Inicia sesión desde la app de escritorio para conectar tu cuenta de SoundCloud.',
+      ),
+    )
+  } else {
+    const statusRow = h('div', { className: 'account-status' })
+    const statusText = h('span', { className: 'text-dim' })
+    statusRow.appendChild(statusText)
+    const actions = h('div', { className: 'data-actions' })
+    accountCard.appendChild(statusRow)
+    accountCard.appendChild(actions)
+
+    const renderAccount = (user: User | null, checking: boolean): void => {
+      statusRow.replaceChildren()
+      actions.replaceChildren()
+      if (checking) {
+        statusText.textContent = 'Comprobando sesión…'
+        statusRow.appendChild(statusText)
+        return
+      }
+      if (!user) {
+        statusRow.appendChild(h('span', { className: 'text-dim' }, 'No has iniciado sesión.'))
+        const loginBtn = h('button', { className: 'btn btn-primary btn-sm' }, 'Iniciar sesión con SoundCloud')
+        loginBtn.addEventListener('click', () => {
+          void desktopInvoke('login_window').catch(() => toastErr('No se pudo abrir la ventana de sesión'))
+        })
+        actions.appendChild(loginBtn)
+        return
+      }
+      const row = h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } })
+      row.appendChild(avatarEl(user.avatar_url, user.username, 40))
+      const info = h('div', { style: { display: 'flex', flexDirection: 'column' } })
+      info.appendChild(h('strong', {}, `${user.username}${user.verified ? ' ✓' : ''}`))
+      info.appendChild(h('span', { className: 'text-faint' }, `${user.followers_count ?? 0} seguidores`))
+      row.appendChild(info)
+      statusRow.appendChild(row)
+      const logoutBtn = h('button', { className: 'btn btn-ghost btn-sm' }, 'Cerrar sesión')
+      logoutBtn.addEventListener('click', () => {
+        void desktopInvoke('logout_window').catch(() => toastErr('No se pudo cerrar sesión'))
+        toast('Ventana de sesión abierta para cerrar tu cuenta')
+      })
+      actions.appendChild(logoutBtn)
+      const likesBtn = h('a', { className: 'btn btn-ghost btn-sm', href: '#/likes' }, 'Ver tus likes')
+      actions.appendChild(likesBtn)
+    }
+
+    renderAccount(null, true)
+    getAPI()
+      .me()
+      .then((user) => renderAccount(user, false))
+      .catch(() => renderAccount(null, false))
+  }
 
   const proxyField = h('div', { className: 'field' })
   proxyField.appendChild(h('label', { className: 'field-label' }, 'URL base del proxy'))

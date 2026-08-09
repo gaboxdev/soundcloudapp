@@ -15,6 +15,7 @@ Un regalo para la comunidad de SoundCloud. MIT, para quien lo quiera, como se hi
 | | |
 |---|---|
 | 🎧 **Reproductor con waveform** | Scrubber visual interactivo, seek por rangos HTTP, preview de 30s para tracks Go+ (SNIP) |
+| 🔑 **Inicio de sesión con SoundCloud** | App de escritorio: entra con tu propia cuenta, ve tu perfil y tus likes sincronizados |
 | 🔎 **Búsqueda en vivo** | Sugerencias mientras escribes, resultados por tracks / playlists / usuarios, scroll infinito |
 | 📈 **Charts** | Tendencias y Top 50 por género (21 géneros), con ranks |
 | 🏠 **Feed de inicio** | Selecciones curadas de SoundCloud (mixed-selections) |
@@ -44,6 +45,18 @@ La API de SoundCloud bloquea CORS desde cualquier origen que no sea `soundcloud.
 - **Producción**: despliega el Cloudflare Worker en `proxy/worker` (~100 líneas) y pon su URL en **Ajustes → Proxy**. Funciona gratis en el plan free de Cloudflare.
 
 El audio y los waveforms se sirven directo desde los CDNs de SoundCloud (`Access-Control-Allow-Origin: *`), sin pasar por el proxy.
+
+### Cuenta e inicio de sesión (escritorio)
+
+SoundCloud cerró el registro de apps OAuth para nuevos desarrolladores, así que Soundlite se conecta con el **login nativo de SoundCloud**: la app abre una ventana con `soundcloud.com`, inicias sesión ahí (con tu cuenta, 2FA incluido) y la sesión queda guardada en la webview. Las peticiones autenticadas (`/me`, tus likes, quitar like) se hacen desde un webview oculto en el mismo origen que la API, donde el CORS de SoundCloud sí permite `soundcloud.com`.
+
+Disponible en **Ajustes → Cuenta** y en **Favoritos → Tu cuenta**:
+
+- Tu perfil (avatar, nombre, seguidores)
+- Tus likes de SoundCloud, con play en cola y quitar like
+- Cerrar sesión (desde la ventana de sesión)
+
+La versión web navegador no puede guardar la sesión (cookies de terceros + CORS); ahí los favoritos siguen siendo locales.
 
 ## 🏗️ Arquitectura
 

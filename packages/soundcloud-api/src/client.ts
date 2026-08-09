@@ -156,6 +156,28 @@ export class SoundCloudAPI {
     return this.mapPaged<T>((await this.transport.getJSON(href)) as SearchResponse<unknown>)
   }
 
+  async me(): Promise<User | null> {
+    try {
+      const url = await this.buildUrl('/me', {})
+      return (await this.transport.authedRequest('GET', url)) as User
+    } catch (error) {
+      if (String(error).includes('401') || String(error).includes('403')) return null
+      throw error
+    }
+  }
+
+  async meLikes(offset = 0, limit = 50): Promise<SearchResponse<Searchable>> {
+    const url = await this.buildUrl('/me/library/all', { offset, limit })
+    const response = (await this.transport.authedRequest('GET', url)) as SearchResponse<unknown>
+    return this.mapPaged<Searchable>(response)
+  }
+
+  async toggleAccountLike(trackId: number, liked: boolean): Promise<void> {
+    const url = await this.buildUrl(`/me/likes/${trackId}`, {})
+    const body = liked ? { item_urn: `soundcloud:tracks:${trackId}` } : undefined
+    await this.transport.authedRequest(liked ? 'PUT' : 'DELETE', url, body)
+  }
+
   async streamUrl(track: Track, preferred: StreamProtocol = 'progressive'): Promise<StreamTarget | null> {
     if (!track.streamable) return null
     const transcodings = track.media?.transcodings ?? []

@@ -2,6 +2,7 @@ export interface Transport {
   getClientId(): Promise<string>
   getJSON(url: string): Promise<unknown>
   rewriteHref(href: string): string
+  authedRequest(method: string, url: string, body?: unknown): Promise<unknown>
 }
 
 export const API_BASE = 'https://api-v2.soundcloud.com'
@@ -50,6 +51,10 @@ export class ProxyTransport implements Transport {
   rewriteHref(href: string): string {
     return `${this.base}/sl-proxy?url=${encodeURIComponent(href)}`
   }
+
+  async authedRequest(_method: string, _url: string, _body?: unknown): Promise<unknown> {
+    throw new Error('Iniciar sesión con SoundCloud solo está disponible en la app de escritorio')
+  }
 }
 
 export class TauriTransport implements Transport {
@@ -75,6 +80,17 @@ export class TauriTransport implements Transport {
 
   rewriteHref(href: string): string {
     return href
+  }
+
+  async authedRequest(method: string, url: string, body?: unknown): Promise<unknown> {
+    const { invoke } = await this.core()
+    const text = await invoke<string>('authed_request', { method, url, body: body ?? null })
+    const separator = text.indexOf('\n')
+    const status = Number(text.slice(0, separator))
+    const payload = text.slice(separator + 1)
+    if (status < 200 || status >= 300) throw new Error(`HTTP ${status}`)
+    if (!payload) return null
+    return JSON.parse(payload)
   }
 }
 
