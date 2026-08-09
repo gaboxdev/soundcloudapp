@@ -28,4 +28,4 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run typecheck -w @soundlite/proxy-worker
+      - run: npm run typecheck -w @soundclear/proxy-worker

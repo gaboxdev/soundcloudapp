@@ -1,4 +1,4 @@
-import type { Track } from '@soundlite/api'
+import type { Track } from '@soundclear/api'
 import { getAPI } from '../api'
 import { isDesktop } from '../api/auth'
 import { accountStore } from '../core/account'
@@ -236,7 +236,7 @@ class Player {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: current.title,
         artist: current.user?.username ?? 'SoundCloud',
-        album: 'Soundlite',
+        album: 'SoundClear',
         artwork: current.artwork_url
           ? [{ src: current.artwork_url.replace(/-t\d{3,4}x\d{3,4}/, '-t500x500'), sizes: '500x500', type: 'image/jpeg' }]
           : [],

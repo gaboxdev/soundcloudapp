@@ -1,4 +1,4 @@
-import { SoundCloudAPI, defaultTransport, isTauri } from '@soundlite/api'
+import { SoundCloudAPI, defaultTransport, isTauri } from '@soundclear/api'
 import { getSettings } from '../core/settings'
 
 let api: SoundCloudAPI | null = null

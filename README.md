@@ -1,10 +1,10 @@
-# Soundlite
+# SoundClear
 
 > Cliente libre para SoundCloud. Rápido, open source y sin frameworks.
 >
 > *Proyecto independiente, sin afiliación con SoundCloud.*
 
-Soundlite es un **cliente nativo de SoundCloud** — no es un wrapper de la web. Habla directamente con la API de SoundCloud, renderiza su propia UI, y funciona como **PWA en el navegador** y como **app de escritorio (Tauri)** con el mismo código.
+SoundClear es un **cliente nativo de SoundCloud** — no es un wrapper de la web. Habla directamente con la API de SoundCloud, renderiza su propia UI, y funciona como **PWA en el navegador** y como **app de escritorio (Tauri)** con el mismo código.
 
 **~21 KB de JavaScript** (gzip) para la app completa. Sin React, sin Vue, sin Svelte: TypeScript vanilla + CSS. El resto es disciplina.
 
@@ -48,13 +48,13 @@ La API de SoundCloud bloquea CORS desde cualquier origen que no sea `soundcloud.
 
 El audio y los waveforms se sirven directo desde los CDNs de SoundCloud (`Access-Control-Allow-Origin: *`), sin pasar por el proxy.
 
-> **Importante**: Soundlite exige iniciar sesión para usarse, y la sesión con SoundCloud solo puede establecerse desde la app de escritorio (cookies de terceros + CORS lo impiden en el navegador). Por eso, hoy **el build web muestra la pantalla de acceso y no permite entrar**: sirve para desarrollo y para desplegar el proxy, pero la app de verdad es la de escritorio. Levantar esa restricción (modo invitado) está en el roadmap.
+> **Importante**: SoundClear exige iniciar sesión para usarse, y la sesión con SoundCloud solo puede establecerse desde la app de escritorio (cookies de terceros + CORS lo impiden en el navegador). Por eso, hoy **el build web muestra la pantalla de acceso y no permite entrar**: sirve para desarrollo y para desplegar el proxy, pero la app de verdad es la de escritorio. Levantar esa restricción (modo invitado) está en el roadmap.
 
 ### Cuenta e inicio de sesión (escritorio)
 
-Al abrir la app, **lo primero que verás es la pantalla de inicio de sesión**: para usar Soundlite hay que conectar tu cuenta de SoundCloud (así la app siempre está lista para ti y no pierdes tus likes). 
+Al abrir la app, **lo primero que verás es la pantalla de inicio de sesión**: para usar SoundClear hay que conectar tu cuenta de SoundCloud (así la app siempre está lista para ti y no pierdes tus likes). 
 
-SoundCloud cerró el registro de apps OAuth para nuevos desarrolladores, así que Soundlite se conecta con el **login nativo de SoundCloud**: la app abre una ventana con `soundcloud.com`, inicias sesión ahí (con tu cuenta, 2FA incluido) y la sesión queda guardada en la webview. Las peticiones autenticadas (`/me`, tus likes, quitar like) se hacen desde un webview oculto en el mismo origen que la API, donde el CORS de SoundCloud sí permite `soundcloud.com`.
+SoundCloud cerró el registro de apps OAuth para nuevos desarrolladores, así que SoundClear se conecta con el **login nativo de SoundCloud**: la app abre una ventana con `soundcloud.com`, inicias sesión ahí (con tu cuenta, 2FA incluido) y la sesión queda guardada en la webview. Las peticiones autenticadas (`/me`, tus likes, quitar like) se hacen desde un webview oculto en el mismo origen que la API, donde el CORS de SoundCloud sí permite `soundcloud.com`.
 
 Disponible en **Ajustes → Cuenta** y en **Favoritos → Tu cuenta**:
 
@@ -113,11 +113,11 @@ Normas: sin comentarios en el código, UI en español, TS estricto, clases kebab
 
 ## ⚖️ Legal
 
-**Soundlite es un proyecto independiente de código abierto, sin afiliación, patrocinio ni respaldo de SoundCloud.** No está desarrollado, avalado ni revisado por SoundCloud.
+**SoundClear es un proyecto independiente de código abierto, sin afiliación, patrocinio ni respaldo de SoundCloud.** No está desarrollado, avalado ni revisado por SoundCloud.
 
-«SoundCloud» es una marca registrada de SoundCloud Global Limited & Co. KG. Sus marcas, logotipos y contenido pertenecen a sus respectivos dueños y aquí se mencionan únicamente de forma descriptiva, para indicar con qué servicio funciona este cliente. Soundlite no usa el nombre ni el logotipo de SoundCloud como identidad propia: tiene su propio nombre y su propia marca.
+«SoundCloud» es una marca registrada de SoundCloud Global Limited & Co. KG. Sus marcas, logotipos y contenido pertenecen a sus respectivos dueños y aquí se mencionan únicamente de forma descriptiva, para indicar con qué servicio funciona este cliente. SoundClear no usa el nombre ni el logotipo de SoundCloud como identidad propia: tiene su propio nombre y su propia marca.
 
-Soundlite solo accede a endpoints públicos que el propio sitio web de SoundCloud utiliza, y no aloja, redistribuye ni descarga contenido protegido salvo cuando el propio autor lo habilita en SoundCloud. Licencia [MIT](./LICENSE).
+SoundClear solo accede a endpoints públicos que el propio sitio web de SoundCloud utiliza, y no aloja, redistribuye ni descarga contenido protegido salvo cuando el propio autor lo habilita en SoundCloud. Licencia [MIT](./LICENSE).
 
 ---
 

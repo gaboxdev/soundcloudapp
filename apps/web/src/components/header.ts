@@ -1,4 +1,5 @@
 import type { AccountState } from '../core/account'
+import { isDesktop } from '../api/auth'
 import { accountStore } from '../core/account'
 import { debounce } from '../core/utils'
 import { currentRoute, navigate } from '../core/router'
@@ -29,13 +30,20 @@ function setActiveNav(): void {
 }
 
 export function renderHeader(): HTMLElement {
+  const desktop = isDesktop()
   const header = h('header', { className: 'app-header' })
+  if (desktop) header.setAttribute('data-tauri-drag-region', 'deep')
   headerEl = header
 
-  const logo = h('a', { className: 'logo', href: '#/', title: 'Soundlite — inicio' })
+  const brand = h('div', { className: 'titlebar-brand' })
+  if (desktop) brand.title = 'Arrastra para mover la ventana · doble clic para maximizar'
+  const logo = desktop
+    ? h('div', { className: 'logo' })
+    : h('a', { className: 'logo', href: '#/', title: 'SoundClear — inicio' })
   logo.innerHTML = appLogo(28)
-  logo.appendChild(h('span', { className: 'logo-name' }, 'Soundlite'))
-  header.appendChild(logo)
+  logo.appendChild(h('span', { className: 'logo-name' }, 'SoundClear'))
+  brand.appendChild(logo)
+  header.appendChild(brand)
 
   const historyNav = h('div', { className: 'history-nav' })
   const backBtn = h('button', { className: 'icon-btn', title: 'Atrás', 'aria-label': 'Atrás' })
@@ -62,6 +70,7 @@ export function renderHeader(): HTMLElement {
   header.appendChild(nav)
 
   const searchWrap = h('div', { className: 'header-search' })
+  if (desktop) searchWrap.setAttribute('data-tauri-drag-region', 'false')
   const searchBox = h('div', { className: 'search-input' })
   searchBox.innerHTML = svgIcon('search', 16)
   const input = h('input', {

@@ -1,7 +1,7 @@
 {
-  "name": "@soundlite/api",
+  "name": "@soundclear/api",
   "version": "0.1.0",
-  "description": "Cliente tipado de la API pública v2 de SoundCloud para Soundlite",
+  "description": "Cliente tipado de la API pública v2 de SoundCloud para SoundClear",
   "license": "MIT",
   "type": "module",
   "main": "src/index.ts",

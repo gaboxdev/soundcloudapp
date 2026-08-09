@@ -1,5 +1,5 @@
-import type { Playlist, Track, User } from '@soundlite/api'
-import { isTrackStub } from '@soundlite/api'
+import type { Playlist, Track, User } from '@soundclear/api'
+import { isTrackStub } from '@soundclear/api'
 import { getAPI } from '../api'
 import { skeletonRows, trackRow } from '../components/trackrow'
 import { link, register } from '../core/router'
@@ -103,11 +103,11 @@ register('playlist', (route, container) => {
   container.classList.add('playlist-view')
   const id = Number(route.params.id)
   if (!Number.isInteger(id) || id <= 0) {
-    document.title = 'Soundlite'
+    document.title = 'SoundClear'
     container.appendChild(errorView('Este enlace no es válido'))
     return
   }
-  document.title = 'Cargando… — Soundlite'
+  document.title = 'Cargando… — SoundClear'
   container.appendChild(skeletonView())
   void load()
 
@@ -117,13 +117,13 @@ register('playlist', (route, container) => {
       playlist = await getAPI().playlist(id)
     } catch {
       if (!container.isConnected) return
-      document.title = 'Soundlite'
+      document.title = 'SoundClear'
       container.innerHTML = ''
       container.appendChild(errorView('No se pudo cargar este contenido', () => void load()))
       return
     }
     if (!container.isConnected) return
-    document.title = `${playlist.title} — Soundlite`
+    document.title = `${playlist.title} — SoundClear`
     container.innerHTML = ''
     renderPlaylist(playlist, container)
   }

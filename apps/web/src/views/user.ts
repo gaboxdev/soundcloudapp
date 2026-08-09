@@ -1,5 +1,5 @@
-import type { Playlist, Searchable, Track, User } from '@soundlite/api'
-import { isPlaylist, isTrack } from '@soundlite/api'
+import type { Playlist, Searchable, Track, User } from '@soundclear/api'
+import { isPlaylist, isTrack } from '@soundclear/api'
 import { getAPI } from '../api'
 import { skeletonRows, trackRow } from '../components/trackrow'
 import { link, register } from '../core/router'
@@ -99,7 +99,7 @@ function bannerEl(url: string): HTMLElement {
 }
 
 register('user', (route, container) => {
-  document.title = 'Perfil — Soundlite'
+  document.title = 'Perfil — SoundClear'
   const id = Number(route.params.id)
   if (!Number.isInteger(id) || id <= 0) {
     container.innerHTML = ''
@@ -213,7 +213,7 @@ register('user', (route, container) => {
       const u = await api.user(id)
       if (!container.isConnected) return
       profile = u
-      document.title = `${u.username} — Soundlite`
+      document.title = `${u.username} — SoundClear`
       renderHeader(u)
     } catch {
       if (!container.isConnected) return

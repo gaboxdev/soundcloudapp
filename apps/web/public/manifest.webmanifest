@@ -1,6 +1,6 @@
 {
-  "name": "Soundlite",
-  "short_name": "Soundlite",
+  "name": "SoundClear",
+  "short_name": "SoundClear",
   "description": "Cliente libre y open source para SoundCloud. Proyecto independiente, sin afiliación con SoundCloud.",
   "start_url": "/",
   "scope": "/",

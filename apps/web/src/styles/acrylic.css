@@ -218,7 +218,24 @@
   }
 }
 
-/* ===== Hook: cristal nativo del sistema ===== */
+/* ===== Cristal nativo del sistema ===== */
+
+:root[data-backdrop='system'] {
+  --system-veil: 0.34;
+}
+
+:root[data-backdrop='system'][data-glass='cristal'] {
+  --system-veil: 0.18;
+}
+
+:root[data-backdrop='system'][data-glass='solido'] {
+  --system-veil: 0.62;
+}
+
+:root[data-backdrop='system'],
+:root[data-backdrop='system'] body {
+  background: transparent;
+}
 
 :root[data-backdrop='system'] .ambient {
   background: transparent;
@@ -230,6 +247,18 @@
   display: none;
 }
 
-:root[data-backdrop='system'] body {
-  background: transparent;
+:root[data-backdrop='system'] .ambient-veil {
+  background: color-mix(in srgb, var(--ambient-color) calc(var(--system-veil) * 100%), transparent);
+}
+
+:root[data-backdrop='system'] .login-gate {
+  background: color-mix(in srgb, var(--ambient-color) 55%, transparent);
+}
+
+:root[data-titlebar='overlay'] .app-header {
+  padding-left: 88px;
+}
+
+:root[data-titlebar='overlay'] .login-gate {
+  padding-top: 48px;
 }

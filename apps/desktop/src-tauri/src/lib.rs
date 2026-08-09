@@ -141,7 +141,7 @@ fn redact(message: &str) -> String {
 }
 
 fn debug_log(message: &str) {
-    let path = std::env::temp_dir().join("soundlite-debug.log");
+    let path = std::env::temp_dir().join("soundclear-debug.log");
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -507,7 +507,7 @@ if(tip)return;
 try{{if(sessionStorage.getItem(KEY))return;}}catch(e){{}}
 var el2=document.createElement("div");
 el2.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;background:#18181b;color:#f4f4f6;border:1px solid #2ecc71;border-radius:10px;padding:10px 14px;font:13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.45);display:flex;align-items:center;gap:10px;";
-el2.innerHTML="¿Ya ves tu sesión de SoundCloud abierta? Cierra esta ventana y Soundlite te dejará entrar automáticamente.";
+el2.innerHTML="¿Ya ves tu sesión de SoundCloud abierta? Cierra esta ventana y SoundClear te dejará entrar automáticamente.";
 var btn2=document.createElement("button");
 btn2.textContent="Entendido";
 btn2.style.cssText="flex-shrink:0;background:#2ecc71;color:#fff;border:none;border-radius:999px;padding:5px 12px;font:600 12px -apple-system,sans-serif;cursor:pointer;";
@@ -759,6 +759,42 @@ fn cors_response(status: u16) -> tauri::http::Response<Vec<u8>> {
         .unwrap_or_default()
 }
 
+fn apply_window_glass(app: &AppHandle) {
+    let Some(main) = app.get_webview_window("main") else {
+        debug_log("cristal: no hay ventana main");
+        return;
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
+        match apply_vibrancy(
+            &main,
+            NSVisualEffectMaterial::HudWindow,
+            Some(NSVisualEffectState::Active),
+            None,
+        ) {
+            Ok(()) => debug_log("cristal: vibrancy de macOS aplicada"),
+            Err(error) => debug_log(&format!("cristal: vibrancy no disponible ({error})")),
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use window_vibrancy::apply_acrylic;
+        match apply_acrylic(&main, Some((10, 10, 16, 130))) {
+            Ok(()) => debug_log("cristal: acrilico de Windows aplicado"),
+            Err(error) => debug_log(&format!("cristal: acrilico no disponible ({error})")),
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = &main;
+        debug_log("cristal: plataforma sin backdrop nativo");
+    }
+}
+
 pub fn run() {
     let bridge_state = Arc::new(BridgeState {
         pending: Mutex::new(None),
@@ -856,7 +892,9 @@ pub fn run() {
                 })
                 .build()?;
 
-            if std::env::var("SOUNDLITE_SELFTEST").is_ok() {
+            apply_window_glass(app.handle());
+
+            if std::env::var("SOUNDCLEAR_SELFTEST").is_ok() {
                 debug_log("SELFTEST: comenzando");
                 let app_for_test = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
@@ -964,5 +1002,5 @@ pub fn run() {
             log_debug,
         ])
         .run(tauri::generate_context!())
-        .expect("error al ejecutar Soundlite");
+        .expect("error al ejecutar SoundClear");
 }

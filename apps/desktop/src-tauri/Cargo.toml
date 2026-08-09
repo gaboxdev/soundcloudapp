@@ -1,19 +1,20 @@
 [package]
-name = "soundlite"
+name = "soundclear"
 version = "0.1.0"
-description = "Soundlite — cliente de SoundCloud de escritorio"
-authors = ["Soundlite"]
+description = "SoundClear — cliente de SoundCloud de escritorio"
+authors = ["SoundClear"]
 edition = "2021"
 
 [lib]
-name = "soundlite_lib"
+name = "soundclear_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["macos-private-api"] }
+window-vibrancy = "0.6"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

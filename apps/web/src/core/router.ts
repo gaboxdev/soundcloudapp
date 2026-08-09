@@ -135,7 +135,7 @@ function notFoundEl(): HTMLElement {
   const box = document.createElement('div')
   box.className = 'page-error'
   box.innerHTML =
-    '<h2>Página no encontrada</h2><p class="text-dim">Esa ruta no existe en Soundlite.</p><div><a class="btn btn-primary" href="#/">Volver al inicio</a></div>'
+    '<h2>Página no encontrada</h2><p class="text-dim">Esa ruta no existe en SoundClear.</p><div><a class="btn btn-primary" href="#/">Volver al inicio</a></div>'
   return box
 }
 

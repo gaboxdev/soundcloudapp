@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="Soundlite — cliente libre y open source para SoundCloud. Proyecto independiente, sin afiliación con SoundCloud." />
+    <meta name="description" content="SoundClear — cliente libre y open source para SoundCloud. Proyecto independiente, sin afiliación con SoundCloud." />
     <meta name="theme-color" content="#08080b" />
     <meta name="color-scheme" content="dark light" />
     <script>
@@ -17,6 +17,13 @@
           var glass = saved && saved.glass
           document.documentElement.dataset.glass =
             glass === 'cristal' || glass === 'solido' ? glass : 'equilibrado'
+          if ('__TAURI_INTERNALS__' in window) {
+            document.documentElement.dataset.backdrop = 'system'
+            document.documentElement.dataset.shell = 'desktop'
+            if (/Mac OS X|Macintosh/.test(navigator.userAgent)) {
+              document.documentElement.dataset.titlebar = 'overlay'
+            }
+          }
           var meta = document.querySelector('meta[name="theme-color"]')
           if (meta) meta.setAttribute('content', dark ? '#08080b' : '#ececed')
         } catch {}
@@ -27,25 +34,25 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Soundlite" />
-    <meta name="application-name" content="Soundlite" />
+    <meta name="apple-mobile-web-app-title" content="SoundClear" />
+    <meta name="application-name" content="SoundClear" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Soundlite" />
+    <meta property="og:site_name" content="SoundClear" />
     <meta property="og:locale" content="es_ES" />
-    <meta property="og:title" content="Soundlite — cliente libre para SoundCloud" />
+    <meta property="og:title" content="SoundClear — cliente libre para SoundCloud" />
     <meta property="og:description" content="Cliente libre y open source para SoundCloud. Proyecto independiente, sin afiliación con SoundCloud. Escucha, busca y descubre sin fricción." />
     <meta property="og:image" content="/icon-512.png" />
-    <meta property="og:image:alt" content="Logotipo de Soundlite" />
+    <meta property="og:image:alt" content="Logotipo de SoundClear" />
     <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="Soundlite — cliente libre para SoundCloud" />
+    <meta name="twitter:title" content="SoundClear — cliente libre para SoundCloud" />
     <meta name="twitter:description" content="Cliente libre y open source para SoundCloud. Proyecto independiente, sin afiliación con SoundCloud. Escucha, busca y descubre sin fricción." />
     <meta name="twitter:image" content="/icon-512.png" />
-    <title>Soundlite — cliente libre para SoundCloud</title>
+    <title>SoundClear — cliente libre para SoundCloud</title>
   </head>
   <body>
     <div id="app"></div>
-    <noscript>Soundlite necesita JavaScript para funcionar.</noscript>
+    <noscript>SoundClear necesita JavaScript para funcionar.</noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

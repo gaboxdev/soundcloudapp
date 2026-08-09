@@ -6,13 +6,14 @@ import { toast, toastErr } from '../ui/toast'
 
 export function renderLoginGate(): HTMLElement {
   const gate = h('div', { className: 'login-gate', hidden: true })
+  if (isDesktop()) gate.setAttribute('data-tauri-drag-region', '')
 
   const card = h('div', { className: 'login-card card card-pad' })
   const logo = document.createElement('div')
   logo.className = 'login-logo'
   logo.innerHTML = appLogo(54)
   card.appendChild(logo)
-  card.appendChild(h('h1', { className: 'login-title' }, 'Soundlite'))
+  card.appendChild(h('h1', { className: 'login-title' }, 'SoundClear'))
   card.appendChild(h('p', { className: 'text-dim' }, 'Cliente libre para SoundCloud. Ligero y rápido.'))
 
   const statusText = h('p', { className: 'text-faint login-status' })
@@ -113,7 +114,7 @@ export function renderLoginGate(): HTMLElement {
         h(
           'p',
           { className: 'text-dim' },
-          'La sesión con tu cuenta de SoundCloud solo está disponible en la app de escritorio de Soundlite.',
+          'La sesión con tu cuenta de SoundCloud solo está disponible en la app de escritorio de SoundClear.',
         ),
       )
       const download = h(
@@ -128,6 +129,7 @@ export function renderLoginGate(): HTMLElement {
   accountStore.subscribe((state) => {
     const ready = state.status === 'ready'
     if (gate.hidden !== ready) gate.hidden = ready
+    document.documentElement.classList.toggle('gate-open', !ready)
     if (ready) {
       stopPoll()
     } else if (state.status === 'guest') {

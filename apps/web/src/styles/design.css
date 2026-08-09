@@ -1148,17 +1148,23 @@ input[type='range'].vol {
 
 /* ===== Login gate ===== */
 
+html.gate-open,
+html.gate-open body {
+  overflow: hidden;
+}
+
 .login-gate {
   position: fixed;
   inset: 0;
   z-index: 200;
   display: flex;
-  align-items: center;
   justify-content: center;
   background: var(--scrim);
   backdrop-filter: blur(28px) saturate(140%);
   -webkit-backdrop-filter: blur(28px) saturate(140%);
   padding: 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .login-gate[hidden] {
@@ -1168,6 +1174,7 @@ input[type='range'].vol {
 .login-card {
   width: 100%;
   max-width: 440px;
+  margin: auto;
   text-align: center;
   padding: 40px 32px;
   display: flex;
@@ -1208,6 +1215,18 @@ input[type='range'].vol {
   width: 100%;
 }
 
+.login-actions .btn {
+  max-width: 100%;
+  white-space: normal;
+  text-wrap: balance;
+}
+
+.login-actions p,
+.login-actions a {
+  max-width: 34ch;
+  text-wrap: pretty;
+}
+
 .login-btn {
   width: 100%;
   padding: 14px 20px;
@@ -1225,6 +1244,73 @@ input[type='range'].vol {
   font-size: 11.5px;
   line-height: 1.5;
   text-wrap: balance;
+}
+
+@media (max-height: 720px) {
+  .login-gate {
+    padding: 16px;
+  }
+
+  .login-card {
+    padding: 26px 26px 24px;
+    gap: 10px;
+  }
+
+  .login-logo {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+  }
+
+  .login-logo svg {
+    width: 40px;
+    height: 40px;
+  }
+
+  .login-title {
+    font-size: 23px;
+  }
+
+  .login-actions {
+    gap: 9px;
+    margin-top: 4px;
+  }
+
+  .login-actions p,
+  .login-actions a,
+  .login-card > .text-dim {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .login-btn {
+    padding: 12px 18px;
+  }
+
+  .login-disclaimer {
+    margin-top: 10px;
+    padding-top: 10px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 520px) {
+  .login-gate {
+    padding: 14px 12px;
+  }
+
+  .login-card {
+    padding: 28px 20px 24px;
+  }
+
+  .login-title {
+    font-size: 22px;
+  }
+
+  .login-actions p,
+  .login-actions a {
+    max-width: none;
+  }
 }
 
 /* ===== Comentarios ===== */

@@ -1,4 +1,4 @@
-import type { Track } from '@soundlite/api'
+import type { Track } from '@soundclear/api'
 import { getAPI } from '../api'
 import { skeletonRows, trackRow } from '../components/trackrow'
 import { link, register } from '../core/router'
@@ -58,7 +58,7 @@ register('charts', (route, container) => {
   const slug = slugs.includes(requested) ? requested : null
   const heading = slug ? `Novedades de ${genreLabel(slug)}` : 'Tendencias'
 
-  document.title = `Charts · ${slug ? genreLabel(slug) : 'Tendencias'} — Soundlite`
+  document.title = `Charts · ${slug ? genreLabel(slug) : 'Tendencias'} — SoundClear`
   container.innerHTML = ''
 
   let offset = 0

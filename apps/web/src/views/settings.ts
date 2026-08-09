@@ -22,12 +22,12 @@ function settingsCard(title: string, children: HTMLElement[]): HTMLElement {
 }
 
 register('settings', (_route, container) => {
-  document.title = 'Ajustes — Soundlite'
+  document.title = 'Ajustes — SoundClear'
 
   const desktop = isDesktop()
   const page = h('div', { className: 'view-page' })
   page.appendChild(h('h1', { className: 'h-display' }, 'Ajustes'))
-  page.appendChild(h('p', { className: 'text-dim' }, 'Personaliza tu experiencia en Soundlite.'))
+  page.appendChild(h('p', { className: 'text-dim' }, 'Personaliza tu experiencia en SoundClear.'))
   container.appendChild(page)
 
   const themeRow = h('div', { className: 'chip-row' })
@@ -101,7 +101,7 @@ register('settings', (_route, container) => {
       h(
         'p',
         { className: 'text-faint' },
-        'Tu sistema pide reducir transparencias, así que Soundlite está usando superficies opacas y este ajuste no se aplica.',
+        'Tu sistema pide reducir transparencias, así que SoundClear está usando superficies opacas y este ajuste no se aplica.',
       ),
     )
   }
@@ -312,7 +312,7 @@ register('settings', (_route, container) => {
   const wipeHint = h(
     'p',
     { className: 'text-faint' },
-    '«Borrar toda la app» elimina ajustes, cola, historial y caché de este dispositivo, y recarga Soundlite.',
+    '«Borrar toda la app» elimina ajustes, cola, historial y caché de este dispositivo, y recarga SoundClear.',
   )
   page.appendChild(settingsCard('Datos', [dataActions, dataHint, wipeHint]))
 
@@ -336,7 +336,7 @@ register('settings', (_route, container) => {
   const aboutLogo = h('span', { className: 'about-logo' })
   aboutLogo.innerHTML = appLogo(42)
   aboutHead.appendChild(aboutLogo)
-  aboutHead.appendChild(h('span', { className: 'about-title' }, `Soundlite v${APP_VERSION}`))
+  aboutHead.appendChild(h('span', { className: 'about-title' }, `SoundClear v${APP_VERSION}`))
   const aboutDesc = h(
     'p',
     { className: 'text-dim' },

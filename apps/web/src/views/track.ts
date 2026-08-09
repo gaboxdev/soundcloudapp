@@ -1,4 +1,4 @@
-import type { Comment, Track, User } from '@soundlite/api'
+import type { Comment, Track, User } from '@soundclear/api'
 import { getAPI } from '../api'
 import { skeletonRows, trackRow } from '../components/trackrow'
 import { link, register } from '../core/router'
@@ -161,11 +161,11 @@ register('track', (route, container) => {
   container.classList.add('track-view')
   const id = Number(route.params.id)
   if (!Number.isInteger(id) || id <= 0) {
-    document.title = 'Soundlite'
+    document.title = 'SoundClear'
     container.appendChild(errorView('Este enlace de track no es válido'))
     return
   }
-  document.title = 'Cargando… — Soundlite'
+  document.title = 'Cargando… — SoundClear'
   container.appendChild(skeletonView())
   void load()
 
@@ -175,13 +175,13 @@ register('track', (route, container) => {
       track = await getAPI().track(id)
     } catch {
       if (!container.isConnected) return
-      document.title = 'Soundlite'
+      document.title = 'SoundClear'
       container.innerHTML = ''
       container.appendChild(errorView('No se pudo cargar el track', () => void load()))
       return
     }
     if (!container.isConnected) return
-    document.title = `${track.title} — Soundlite`
+    document.title = `${track.title} — SoundClear`
     container.innerHTML = ''
     renderTrack(track, container)
   }

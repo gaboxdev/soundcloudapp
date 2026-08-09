@@ -1,4 +1,4 @@
-import type { Playlist, SearchResponse, Track, User } from '@soundlite/api'
+import type { Playlist, SearchResponse, Track, User } from '@soundclear/api'
 import { getAPI } from '../api'
 import { skeletonRows, trackRow } from '../components/trackrow'
 import { link, navigate, register, searchLink } from '../core/router'
@@ -35,7 +35,7 @@ register('search', (route, container) => {
   const query = (route.params.q ?? '').trim()
   const tab = parseTab(route.params.tab)
 
-  document.title = query ? `«${query}» — Soundlite` : 'Búsqueda — Soundlite'
+  document.title = query ? `«${query}» — SoundClear` : 'Búsqueda — SoundClear'
 
   let tracks: Track[] = []
   let next: string | null = null

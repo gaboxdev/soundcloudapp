@@ -64,6 +64,13 @@
 
 /* ===== Cabecera ===== */
 
+.titlebar-brand {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  flex-shrink: 0;
+}
+
 .logo {
   display: flex;
   align-items: center;
@@ -76,6 +83,22 @@
   font-size: 18px;
   font-weight: 800;
   letter-spacing: -0.03em;
+}
+
+:root[data-shell='desktop'] .logo {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+
+:root[data-shell='desktop'] .titlebar-brand:hover .logo {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-shell='desktop'] .logo {
+    transition: none;
+  }
 }
 
 .history-nav {

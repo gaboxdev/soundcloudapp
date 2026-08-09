@@ -46,7 +46,7 @@ function preflight(req: IncomingMessage, res: ServerResponse): boolean {
 
 function slProxy(): Plugin {
   return {
-    name: 'soundlite-proxy',
+    name: 'soundclear-proxy',
     configureServer(server) {
       server.middlewares.use('/sl-proxy', async (req: IncomingMessage, res: ServerResponse) => {
         if (preflight(req, res)) return
@@ -124,7 +124,7 @@ async function buildIdFrom(outDir: string): Promise<string> {
 function slServiceWorker(): Plugin {
   let outDir = ''
   return {
-    name: 'soundlite-sw-version',
+    name: 'soundclear-sw-version',
     apply: 'build',
     configResolved(config) {
       outDir = resolve(config.root, config.build.outDir)

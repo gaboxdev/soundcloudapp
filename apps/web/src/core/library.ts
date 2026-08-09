@@ -1,4 +1,4 @@
-import type { Track } from '@soundlite/api'
+import type { Track } from '@soundclear/api'
 
 const LIKES_KEY = 'sl:likes'
 const HISTORY_KEY = 'sl:history'

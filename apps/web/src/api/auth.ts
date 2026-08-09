@@ -1,4 +1,4 @@
-import { isTauri } from '@soundlite/api'
+import { isTauri } from '@soundclear/api'
 
 export function isDesktop(): boolean {
   return isTauri()

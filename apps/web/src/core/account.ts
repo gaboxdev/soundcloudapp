@@ -1,5 +1,5 @@
-import type { User } from '@soundlite/api'
-import { ApiError } from '@soundlite/api'
+import type { User } from '@soundclear/api'
+import { ApiError } from '@soundclear/api'
 import { getAPI } from '../api'
 import { desktopInvoke, isDesktop } from '../api/auth'
 import { createStore } from './store'

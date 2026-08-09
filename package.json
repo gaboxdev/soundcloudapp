@@ -1,8 +1,8 @@
 {
-  "name": "soundlite",
+  "name": "soundclear",
   "version": "0.1.0",
   "private": true,
-  "description": "Soundlite — un cliente de SoundCloud súper ligero, rápido y open source",
+  "description": "SoundClear — un cliente de SoundCloud súper ligero, rápido y open source",
   "license": "MIT",
   "workspaces": [
     "packages/*",

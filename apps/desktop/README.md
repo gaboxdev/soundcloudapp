@@ -1,6 +1,6 @@
-# @soundlite/desktop
+# @soundclear/desktop
 
-App de escritorio de Soundlite construida con [Tauri 2](https://v2.tauri.app/) (Rust) que envuelve la web app.
+App de escritorio de SoundClear construida con [Tauri 2](https://v2.tauri.app/) (Rust) que envuelve la web app.
 
 ## Requisitos
 

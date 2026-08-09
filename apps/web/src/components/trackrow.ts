@@ -1,5 +1,5 @@
-import type { Track, TrackStub, User } from '@soundlite/api'
-import { isTrackStub } from '@soundlite/api'
+import type { Track, TrackStub, User } from '@soundclear/api'
+import { isTrackStub } from '@soundclear/api'
 import type { PlayerState } from '../player/player'
 import { player } from '../player/player'
 import { artEl } from '../ui/artwork'

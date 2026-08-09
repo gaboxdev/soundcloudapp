@@ -1,4 +1,4 @@
-import type { Track } from '@soundlite/api'
+import type { Track } from '@soundclear/api'
 import { artworkUrl, initials } from '../core/utils'
 
 export interface ArtworkOptions {

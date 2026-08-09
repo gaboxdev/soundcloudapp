@@ -1,4 +1,4 @@
-# Soundlite
+# SoundClear
 
 Cliente de SoundCloud súper ligero, rápido y open source. No es un wrapper de la web: cliente nativo con API propia, reproductor con waveform, cola y PWA + escritorio (Tauri).
 
@@ -43,7 +43,7 @@ SoundCloud no permite registrar apps OAuth nuevas → la sesión se hace con el 
 - `login_window` / `logout_window`: abren una ventana con soundcloud.com / soundcloud.com/logout. La ventana de login lleva un script inyectado que (1) consulta `/me` cada 2s y al detectar sesión navega a `tauri://localhost/auth-login-complete` (Rust la cierra junto a los popups) y (2) muestra avisos flotantes (en /login: usar email+contraseña, passkeys no soportados; fuera de /login: cerrar ventana) + botón «He iniciado sesión · Continuar» (cierra la ventana y fuerza la re-verificación). Los popups de OAuth se crean como ventanas Tauri `sl-popup-N` (comparten cookies y se pueden cerrar). `close_login_windows` cierra login + popups, trae `main` al frente y emite `sl-session-check`.
 - `authed_request(method, url, body)`: webview oculta `sl-bridge` cargada en `soundcloud.com/robots.txt` (mismo origen → envía cookies y el CORS de la API la permite). Serializado con mutex, espera lista del puente, reintento 1x. Ejecuta `fetch` con `credentials: 'include'` y devuelve el resultado navegando a `tauri://localhost/auth-bridge?status=..&body=..` (se captura con `on_page_load` y se resuelve con oneshot). El cliente TS parsea `"status\nbody"`.
 - La SPA NO arranca en ventanas que no sean `main` (`apps/web/src/main.ts` comprueba el label) — evita que el puente se auto-polle y rompa la sesión.
-- Debug: `debug_log` escribe en `$TMPDIR/soundlite-debug.log` (cap 512KB). Comando `log_debug`. Modo auto-test: `SOUNDLITE_SELFTEST=1 cargo run` — hace client_id → `/me` → abre/cierra login → loguea todo → exit(0).
+- Debug: `debug_log` escribe en `$TMPDIR/soundclear-debug.log` (cap 512KB). Comando `log_debug`. Modo auto-test: `SOUNDCLEAR_SELFTEST=1 cargo run` — hace client_id → `/me` → abre/cierra login → loguea todo → exit(0).
 
 En web (`ProxyTransport`) `authedRequest` lanza error → las vistas deben comprobar `isDesktop()` (`apps/web/src/api/auth.ts`) antes de ofrecer login.
 
@@ -55,7 +55,7 @@ Al abrir la app se muestra la pantalla de acceso (`src/components/logingate.ts`)
 - La gate hace polling de `refreshAccount()` cada 2.5s mientras no haya sesión (solo desktop). En web muestra un aviso + enlace a la app de escritorio.
 - `settings.ts` y la gate se suscriben a `accountStore` (patrón auto-descarte).
 
-### Core (`@soundlite/api`)
+### Core (`@soundclear/api`)
 
 - `Transport` (interfaz): `getClientId()`, `getJSON(url)`, `rewriteHref(href)`, `authedRequest(method, url, body?)` (solo Tauri; en web lanza error). Implementaciones: `ProxyTransport(base)`, `TauriTransport`.
 - `SoundCloudAPI` (instancia única vía `getAPI()` en `apps/web/src/api/index.ts`):
@@ -155,6 +155,22 @@ En claro el caso peor es el espejo (carátula NEGRA sobre velo blanco, fondo `rg
 **Accesibilidad.** `@media (prefers-reduced-transparency: reduce)` sube todos los velos a 1, quita los blur y esconde el ambiente. No basta con quitar los filtros: quedaría una interfaz semitransparente sobre una carátula nítida, que es peor que cualquiera de las dos cosas.
 
 **Hook `data-backdrop="system"`** (en `<html>`, apagado): para cuando el escritorio monte vibrancy nativa (Tauri + `window-vibrancy` + ventana transparente). Quita el suelo y el ambiente para que se vea el cristal del compositor.
+
+**Hook `data-shell="desktop"`** (en `<html>`, lo pone el script de arranque de `index.html` cuando existe `__TAURI_INTERNALS__`): en escritorio la cabecera ES la barra de título, así que el logo pasa a ser marca decorativa (`opacity: 0` + `pointer-events: none`) y solo aparece al pasar el ratón por `.titlebar-brand`. El hueco que ocupa queda libre para arrastrar. En web el logo sigue siendo el enlace a inicio.
+
+### Arrastrar y maximizar la ventana (escritorio)
+
+Con `titleBarStyle: "Overlay"` + `hiddenTitle` la webview cubre TODA la ventana, incluida la barra de título nativa: sin regiones de arrastre declaradas la ventana no se puede mover ni maximizar con doble clic. Los permisos ya están en `capabilities/default.json` (`allow-start-dragging`, `allow-toggle-maximize`); lo que hace falta es el marcado.
+
+Tauri 2.11 acepta tres valores en `data-tauri-drag-region` (ver `tauri/src/window/scripts/drag.js`): sin valor = solo el impacto directo en ese elemento arrastra; `"deep"` = arrastra cualquier descendiente; `"false"` = bloquea el arrastre en ese subárbol. El recorrido va de `composedPath()[0]` hacia arriba y **los elementos clicables (`A`, `BUTTON`, `INPUT`, `SELECT`, `TEXTAREA`, `LABEL`, `SUMMARY`, `[tabindex]`, roles interactivos) cortan el arrastre por sí solos** — no hay que excluirlos a mano.
+
+- `.app-header` lleva `"deep"`: se arrastra por cualquier hueco y el doble clic maximiza. Botones, enlaces y el avatar quedan excluidos solos.
+- `.header-search` lleva `"false"`: el envoltorio del buscador no es clicable, así que sin esto un clic en el icono de la lupa o en el padding arrancaría un arrastre en vez de enfocar el campo.
+- `.login-gate` lleva el atributo **sin valor**: arrastra solo el fondo, nunca la tarjeta. Importante porque con sesión cerrada la puerta tapa la cabecera y dejaría la ventana sin ningún asidero.
+
+En macOS el maximizar ocurre en `mouseup` (se cancela si el ratón se movió), no en `mousedown`. El arrastre hace `preventDefault()` en `mousedown`, así que dentro de una región de arrastre no se puede seleccionar texto: no marcar `.app-main` ni contenedores de contenido.
+
+`:root[data-titlebar='overlay'] .app-header` reserva `padding-left: 88px` para los semáforos de macOS.
 
 ### Sistema de diseño (design.css)
 

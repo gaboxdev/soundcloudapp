@@ -1,8 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Soundlite",
+  "productName": "SoundClear",
+  "mainBinaryName": "soundclear",
   "version": "0.1.0",
-  "identifier": "dev.soundlite.app",
+  "identifier": "dev.soundclear.app",
   "build": {
     "beforeDevCommand": "cd ../.. && npm run dev -w apps/web",
     "devUrl": "http://localhost:5173",
@@ -10,14 +11,18 @@
     "frontendDist": "../../web/dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "Soundlite",
+        "title": "SoundClear",
         "width": 1240,
         "height": 820,
         "minWidth": 960,
         "minHeight": 600,
-        "center": true
+        "center": true,
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {

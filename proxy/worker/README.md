@@ -1,6 +1,6 @@
-# @soundlite/proxy-worker
+# @soundclear/proxy-worker
 
-Proxy de Cloudflare Worker para Soundlite en producción web. `api-v2.soundcloud.com` bloquea CORS para orígenes que no sean soundcloud.com, así que la web app en producción necesita un proxy que añada `Access-Control-Allow-Origin: *` e inyecte el `client_id`.
+Proxy de Cloudflare Worker para SoundClear en producción web. `api-v2.soundcloud.com` bloquea CORS para orígenes que no sean soundcloud.com, así que la web app en producción necesita un proxy que añada `Access-Control-Allow-Origin: *` e inyecte el `client_id`.
 
 ## Endpoints
 
@@ -21,9 +21,9 @@ Dev local:
 npm run dev
 ```
 
-## Usarlo en Soundlite
+## Usarlo en SoundClear
 
-1. Despliega el worker y copia la URL (p. ej. `https://soundlite-proxy.<tu-subdominio>.workers.dev`).
-2. En Soundlite: Ajustes → campo `apiBase` → pega la URL del worker (sin barra final).
+1. Despliega el worker y copia la URL (p. ej. `https://soundclear-proxy.<tu-subdominio>.workers.dev`).
+2. En SoundClear: Ajustes → campo `apiBase` → pega la URL del worker (sin barra final).
 
 La web app hará `GET <apiBase>/sl-client-id` y `GET <apiBase>/sl-proxy?url=...` para todas las llamadas a la API.

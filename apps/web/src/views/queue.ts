@@ -1,4 +1,4 @@
-import type { Track } from '@soundlite/api'
+import type { Track } from '@soundclear/api'
 import { register } from '../core/router'
 import { player, type PlayerState } from '../player/player'
 import { trackRow } from '../components/trackrow'
@@ -12,7 +12,7 @@ function moveInQueue(from: number, to: number): void {
 }
 
 register('queue', (_route, container) => {
-  document.title = 'Cola — Soundlite'
+  document.title = 'Cola — SoundClear'
 
   const page = h('div', { className: 'view-page' })
 

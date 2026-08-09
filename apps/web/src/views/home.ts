@@ -1,5 +1,5 @@
-import type { PlaylistSummary, Selection, Track, User } from '@soundlite/api'
-import { isPlaylistSummary } from '@soundlite/api'
+import type { PlaylistSummary, Selection, Track, User } from '@soundclear/api'
+import { isPlaylistSummary } from '@soundclear/api'
 import { getAPI } from '../api'
 import { skeletonRows, trackRow } from '../components/trackrow'
 import { link, register } from '../core/router'
@@ -33,7 +33,7 @@ function selectionItems(selection: Selection): PlaylistSummary[] {
 }
 
 register('home', (_route, container) => {
-  document.title = 'Inicio — Soundlite'
+  document.title = 'Inicio — SoundClear'
   const api = getAPI()
   let seq = 0
 

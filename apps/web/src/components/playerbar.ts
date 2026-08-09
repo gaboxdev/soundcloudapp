@@ -1,4 +1,4 @@
-import type { User } from '@soundlite/api'
+import type { User } from '@soundclear/api'
 import { getAPI } from '../api'
 import { link } from '../core/router'
 import { fmtTime } from '../core/utils'
@@ -99,7 +99,7 @@ export function renderPlayerBar(): HTMLElement {
       nowTitle.removeAttribute('href')
       nowTitle.textContent = 'Sin reproducción'
       nowArtist.removeAttribute('href')
-      nowArtist.textContent = 'Soundlite'
+      nowArtist.textContent = 'SoundClear'
       likeBtn.dataset.liked = 'false'
       likeBtn.innerHTML = svgIcon('heart', 18)
       return

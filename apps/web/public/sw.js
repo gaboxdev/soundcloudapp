@@ -1,5 +1,5 @@
 const BUILD = '__SL_BUILD__'
-const VERSION = `soundlite-${BUILD.startsWith('__SL') ? 'dev' : BUILD}`
+const VERSION = `soundclear-${BUILD.startsWith('__SL') ? 'dev' : BUILD}`
 const ASSET_CACHE = 'sl-assets'
 const KEEP = [VERSION, ASSET_CACHE]
 const ASSET_LIMIT = 200

@@ -1,4 +1,4 @@
-import type { Playlist, PlaylistSummary, Searchable } from '@soundlite/api'
+import type { Playlist, PlaylistSummary, Searchable } from '@soundclear/api'
 import { register } from '../core/router'
 import { player, type PlayerState } from '../player/player'
 import { getAPI } from '../api'
@@ -36,7 +36,7 @@ function isPlaylistLike(item: Searchable): item is Playlist {
 }
 
 register('likes', (_route, container) => {
-  document.title = 'Favoritos — Soundlite'
+  document.title = 'Favoritos — SoundClear'
 
   const desktop = isDesktop()
   let tab: Tab = 'likes'
@@ -240,7 +240,7 @@ register('likes', (_route, container) => {
       state.likes.length === 0 ? '' : `${state.likes.length} ${state.likes.length === 1 ? 'track' : 'tracks'}`
     setNotice(
       state.likesTruncated
-        ? 'Tienes tantos favoritos que Soundlite solo ha cargado los más recientes. Usa la búsqueda para encontrar el resto.'
+        ? 'Tienes tantos favoritos que SoundClear solo ha cargado los más recientes. Usa la búsqueda para encontrar el resto.'
         : null,
     )
     if (state.likes.length === 0) {
