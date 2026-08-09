@@ -24,6 +24,7 @@ struct ClientIdState(Mutex<Option<(String, Instant)>>);
 struct BridgeState {
     pending: Mutex<Option<oneshot::Sender<Result<String, String>>>>,
     lock: tokio::sync::Mutex<()>,
+    ready: std::sync::atomic::AtomicBool,
 }
 
 fn debug_log(message: &str) {
@@ -58,31 +59,26 @@ fn close_login_windows_in(app: &AppHandle) {
     let _ = app.emit("sl-session-check", ());
 }
 
-async fn wait_bridge_ready(window: &WebviewWindow) -> bool {
+async fn wait_bridge_ready(window: &WebviewWindow, ready: &std::sync::atomic::AtomicBool) -> bool {
     for _ in 0..16 {
-        let is_ready = window
-            .url()
-            .ok()
-            .map(|current| current.as_str().starts_with(BRIDGE_BASE_URL))
-            .unwrap_or(false);
-        if is_ready {
+        if ready.load(Ordering::Relaxed) {
             return true;
         }
         let _ = window.navigate(BRIDGE_BASE_URL.parse().unwrap());
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
-    window
-        .url()
-        .ok()
-        .map(|current| current.as_str().starts_with(BRIDGE_BASE_URL))
-        .unwrap_or(false)
+    ready.load(Ordering::Relaxed)
 }
 
-fn app_base_url(app: &AppHandle) -> String {
-    app.get_webview_window("main")
-        .and_then(|main| main.url().ok())
-        .map(|main| format!("{}//{}", main.scheme(), main.host_str().unwrap_or("localhost")))
-        .unwrap_or_else(|| "tauri://localhost".to_string())
+fn app_base_url() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        "tauri://localhost".to_string()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "http://tauri.localhost".to_string()
+    }
 }
 
 fn allow_popup(
@@ -91,22 +87,10 @@ fn allow_popup(
     move |url, features| {
         let index = POPUP_COUNTER.fetch_add(1, Ordering::Relaxed);
         let label = format!("{POPUP_PREFIX}-{index}");
-        let (width, height) = features
-            .size()
-            .map(|size| {
-                (
-                    size.width.clamp(320.0, 1200.0),
-                    size.height.clamp(400.0, 1400.0),
-                )
-            })
-            .unwrap_or((520.0, 600.0));
         let mut builder = WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url))
             .title("")
-            .inner_size(width, height)
+            .window_features(features)
             .initialization_script(LOGIN_HINT_SCRIPT);
-        if let Some(position) = features.position() {
-            builder = builder.position(position.x, position.y);
-        }
         match builder.build() {
             Ok(window) => NewWindowResponse::Create { window },
             Err(_) => NewWindowResponse::Deny,
@@ -266,11 +250,7 @@ async fn login_window(app: AppHandle, state: State<'_, ClientIdState>) -> Result
         return Ok(());
     }
     let client_id = get_client_id(state).await.ok();
-    let base = app
-        .get_webview_window("main")
-        .and_then(|main| main.url().ok())
-        .map(|main| format!("{}//{}", main.scheme(), main.host_str().unwrap_or("localhost")))
-        .unwrap_or_else(|| "tauri://localhost".to_string());
+    let base = app_base_url();
     let script = build_login_script(client_id, &base);
     let app_for_page_load = app.clone();
     let app_for_events = app.clone();
@@ -346,12 +326,12 @@ async fn authed_request(
     debug_log(&format!("authed {method} {url}"));
 
     let _request_guard = state.lock.lock().await;
-    if !wait_bridge_ready(&window).await {
+    if !wait_bridge_ready(&window, &state.ready).await {
         debug_log("authed: puente no listo");
         return Err("puente de sesión no listo".to_string());
     }
 
-    let base = app_base_url(&app);
+    let base = app_base_url();
     let method_json = serde_json::to_string(&method).map_err(|error| error.to_string())?;
     let url_json = serde_json::to_string(&url).map_err(|error| error.to_string())?;
     let body_js = match &body {
@@ -422,6 +402,7 @@ pub fn run() {
     let bridge_state = Arc::new(BridgeState {
         pending: Mutex::new(None),
         lock: tokio::sync::Mutex::new(()),
+        ready: std::sync::atomic::AtomicBool::new(false),
     });
     let bridge_for_setup = bridge_state.clone();
 
@@ -445,6 +426,9 @@ pub fn run() {
                     return;
                 }
                 let url = payload.url().to_string();
+                if url.contains("soundcloud.com") {
+                    state_for_window.ready.store(true, Ordering::Relaxed);
+                }
                 if !url.contains("auth-bridge") {
                     return;
                 }
@@ -507,7 +491,7 @@ pub fn run() {
                         debug_log(&format!("SELFTEST: login_window error {error}"));
                     }
                     debug_log("SELFTEST: ventana de login abierta");
-                    tokio::time::sleep(Duration::from_secs(3)).await;
+                    tokio::time::sleep(Duration::from_secs(20)).await;
                     let labels: Vec<String> = app_for_test
                         .webview_windows()
                         .keys()
