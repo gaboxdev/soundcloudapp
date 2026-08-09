@@ -58,6 +58,8 @@ Disponible en **Ajustes → Cuenta** y en **Favoritos → Tu cuenta**:
 - Tus likes de SoundCloud, con play en cola y quitar like
 - Cerrar sesión (desde la ventana de sesión)
 
+**Sobre passkeys y botones sociales (Google/Apple)**: la webview del sistema en macOS no soporta passkeys (WebAuthn de plataforma) — es una limitación de WebKit, [issue abierta en Tauri](https://github.com/tauri-apps/tauri/issues/7926) desde 2023. Si al iniciar sesión con Google o Apple te pide passkey, elige **«Usar contraseña» / «Otras opciones»**: el login con email + contraseña (+ código 2FA) funciona perfectamente en la app. La ventana de login muestra un aviso automático en esas pantallas. En Windows (WebView2/Chromium) los passkeys sí funcionarán.
+
 La versión web navegador no puede guardar la sesión (cookies de terceros + CORS), por eso la pantalla de acceso te indica cómo obtener la app de escritorio.
 
 ## 🏗️ Arquitectura

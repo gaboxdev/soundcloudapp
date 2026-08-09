@@ -83,6 +83,26 @@ async fn proxy_fetch(url: String, state: State<'_, ClientIdState>) -> Result<Str
         .map_err(|error| format!("leer respuesta: {error}"))
 }
 
+const LOGIN_HINT_SCRIPT: &str = r#"(function(){
+var HOSTS=["accounts.google.com","appleid.apple.com"];
+var KEY="sl_login_hint_dismissed";
+try{if(sessionStorage.getItem(KEY))return;}catch(e){}
+function show(){
+var host=window.location.hostname;
+if(HOSTS.indexOf(host)===-1)return;
+var el=document.createElement("div");
+el.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;background:#18181b;color:#f4f4f6;border:1px solid #ff5500;border-radius:10px;padding:10px 14px;font:13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.45);display:flex;align-items:center;gap:10px;";
+el.innerHTML="Los passkeys no funcionan dentro de la app (limitación del sistema). Usa la opción de <strong>contraseña</strong> o <em>otras opciones</em> para iniciar sesión.";
+var btn=document.createElement("button");
+btn.textContent="Entendido";
+btn.style.cssText="flex-shrink:0;background:#ff5500;color:#fff;border:none;border-radius:999px;padding:5px 12px;font:600 12px -apple-system,sans-serif;cursor:pointer;";
+btn.onclick=function(){try{sessionStorage.setItem(KEY,"1");}catch(e){}el.remove();};
+el.appendChild(btn);
+document.documentElement.appendChild(el);
+}
+if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",show);}else{show();}
+})();"#;
+
 #[tauri::command]
 async fn login_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(LOGIN_LABEL) {
@@ -93,12 +113,13 @@ async fn login_window(app: AppHandle) -> Result<(), String> {
     WebviewWindowBuilder::new(
         &app,
         LOGIN_LABEL,
-        WebviewUrl::External("https://soundcloud.com".parse().unwrap()),
+        WebviewUrl::External("https://soundcloud.com/login".parse().unwrap()),
     )
     .title("Iniciar sesión con SoundCloud")
     .inner_size(1000.0, 760.0)
     .min_inner_size(720.0, 560.0)
     .center()
+    .initialization_script(LOGIN_HINT_SCRIPT)
     .on_new_window(|_url, _features| NewWindowResponse::Allow)
     .build()
     .map_err(|error| error.to_string())?;
@@ -119,6 +140,7 @@ async fn logout_window(app: AppHandle) -> Result<(), String> {
         )
         .title("Cerrar sesión en SoundCloud")
         .inner_size(720.0, 560.0)
+        .initialization_script(LOGIN_HINT_SCRIPT)
         .on_new_window(|_url, _features| NewWindowResponse::Allow)
         .build()
         .map_err(|error| error.to_string())?;
