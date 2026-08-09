@@ -1,20 +1,68 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use regex::Regex;
-use tauri::webview::{NewWindowResponse, PageLoadEvent};
+use tauri::webview::{NewWindowFeatures, NewWindowResponse, PageLoadEvent};
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tokio::sync::oneshot;
+use url::Url;
 
 const CLIENT_ID_TTL: Duration = Duration::from_secs(20 * 60);
 const BRIDGE_LABEL: &str = "sl-bridge";
 const BRIDGE_BASE_URL: &str = "https://soundcloud.com/robots.txt";
 const LOGIN_LABEL: &str = "sl-login";
+const POPUP_PREFIX: &str = "sl-popup";
+
+static POPUP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 struct ClientIdState(Mutex<Option<(String, Instant)>>);
 
 struct BridgeState(Mutex<Option<oneshot::Sender<Result<String, String>>>>);
+
+fn close_login_windows_in(app: &AppHandle) {
+    let labels: Vec<String> = app
+        .webview_windows()
+        .keys()
+        .filter(|label| label.as_str() == LOGIN_LABEL || label.starts_with(POPUP_PREFIX))
+        .cloned()
+        .collect();
+    for label in labels {
+        if let Some(window) = app.get_webview_window(&label) {
+            let _ = window.close();
+        }
+    }
+}
+
+fn allow_popup(
+    app: AppHandle,
+) -> impl Fn(Url, NewWindowFeatures) -> NewWindowResponse<tauri::Wry> + Send + 'static {
+    move |url, features| {
+        let index = POPUP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let label = format!("{POPUP_PREFIX}-{index}");
+        let (width, height) = features
+            .size()
+            .map(|size| {
+                (
+                    size.width.clamp(320.0, 1200.0),
+                    size.height.clamp(400.0, 1400.0),
+                )
+            })
+            .unwrap_or((520.0, 600.0));
+        let mut builder = WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url))
+            .title("")
+            .inner_size(width, height)
+            .initialization_script(LOGIN_HINT_SCRIPT);
+        if let Some(position) = features.position() {
+            builder = builder.position(position.x, position.y);
+        }
+        match builder.build() {
+            Ok(window) => NewWindowResponse::Create { window },
+            Err(_) => NewWindowResponse::Deny,
+        }
+    }
+}
 
 fn extract_client_id(html: &str) -> Option<String> {
     let patterns = [
@@ -120,8 +168,16 @@ async fn login_window(app: AppHandle) -> Result<(), String> {
     .min_inner_size(720.0, 560.0)
     .center()
     .initialization_script(LOGIN_HINT_SCRIPT)
-    .on_new_window(|_url, _features| NewWindowResponse::Allow)
+    .on_new_window(allow_popup(app.clone()))
     .build()
+    .map(|window| {
+        let app_for_events = app.clone();
+        window.on_window_event(move |event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                close_login_windows_in(&app_for_events);
+            }
+        });
+    })
     .map_err(|error| error.to_string())?;
     Ok(())
 }
@@ -141,10 +197,16 @@ async fn logout_window(app: AppHandle) -> Result<(), String> {
         .title("Cerrar sesión en SoundCloud")
         .inner_size(720.0, 560.0)
         .initialization_script(LOGIN_HINT_SCRIPT)
-        .on_new_window(|_url, _features| NewWindowResponse::Allow)
+        .on_new_window(allow_popup(app.clone()))
         .build()
         .map_err(|error| error.to_string())?;
     }
+    Ok(())
+}
+
+#[tauri::command]
+async fn close_login_windows(app: AppHandle) -> Result<(), String> {
+    close_login_windows_in(&app);
     Ok(())
 }
 
@@ -257,6 +319,7 @@ pub fn run() {
             authed_request,
             login_window,
             logout_window,
+            close_login_windows,
         ])
         .run(tauri::generate_context!())
         .expect("error al ejecutar Soundlite");

@@ -41,8 +41,11 @@ export function renderLoginGate(): HTMLElement {
   let previousStatus: AccountState['status'] = 'unknown'
 
   function render(state: AccountState): void {
-    if (state.status === 'ready' && previousStatus !== 'ready' && state.user) {
-      toast(`¡Bienvenido, ${state.user.username}!`, 'ok')
+    if (state.status === 'ready' && previousStatus !== 'ready') {
+      if (state.user) toast(`¡Bienvenido, ${state.user.username}!`, 'ok')
+      if (isDesktop()) {
+        desktopInvoke('close_login_windows').catch(() => {})
+      }
     }
     previousStatus = state.status
 
