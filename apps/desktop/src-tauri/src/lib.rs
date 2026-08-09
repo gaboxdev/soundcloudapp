@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use regex::Regex;
-use tauri::webview::PageLoadEvent;
+use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tokio::sync::oneshot;
 
@@ -99,6 +99,7 @@ async fn login_window(app: AppHandle) -> Result<(), String> {
     .inner_size(1000.0, 760.0)
     .min_inner_size(720.0, 560.0)
     .center()
+    .on_new_window(|_url, _features| NewWindowResponse::Allow)
     .build()
     .map_err(|error| error.to_string())?;
     Ok(())
@@ -118,6 +119,7 @@ async fn logout_window(app: AppHandle) -> Result<(), String> {
         )
         .title("Cerrar sesión en SoundCloud")
         .inner_size(720.0, 560.0)
+        .on_new_window(|_url, _features| NewWindowResponse::Allow)
         .build()
         .map_err(|error| error.to_string())?;
     }
