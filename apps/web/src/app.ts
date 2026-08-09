@@ -1,6 +1,8 @@
 import { render } from './core/router'
 import { renderHeader } from './components/header'
 import { renderPlayerBar } from './components/playerbar'
+import { renderLoginGate } from './components/logingate'
+import { refreshAccount, watchSessionWindow } from './core/account'
 import { player } from './player/player'
 
 let initialized = false
@@ -22,6 +24,10 @@ export function bootstrapApp(): void {
   app.appendChild(main)
 
   app.appendChild(renderPlayerBar())
+
+  app.appendChild(renderLoginGate())
+  watchSessionWindow()
+  void refreshAccount()
 
   window.addEventListener('hashchange', () => render())
   render()

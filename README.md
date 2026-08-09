@@ -48,6 +48,8 @@ El audio y los waveforms se sirven directo desde los CDNs de SoundCloud (`Access
 
 ### Cuenta e inicio de sesión (escritorio)
 
+Al abrir la app, **lo primero que verás es la pantalla de inicio de sesión**: para usar Soundlite hay que conectar tu cuenta de SoundCloud (así la app siempre está lista para ti y no pierdes tus likes). 
+
 SoundCloud cerró el registro de apps OAuth para nuevos desarrolladores, así que Soundlite se conecta con el **login nativo de SoundCloud**: la app abre una ventana con `soundcloud.com`, inicias sesión ahí (con tu cuenta, 2FA incluido) y la sesión queda guardada en la webview. Las peticiones autenticadas (`/me`, tus likes, quitar like) se hacen desde un webview oculto en el mismo origen que la API, donde el CORS de SoundCloud sí permite `soundcloud.com`.
 
 Disponible en **Ajustes → Cuenta** y en **Favoritos → Tu cuenta**:
@@ -56,7 +58,7 @@ Disponible en **Ajustes → Cuenta** y en **Favoritos → Tu cuenta**:
 - Tus likes de SoundCloud, con play en cola y quitar like
 - Cerrar sesión (desde la ventana de sesión)
 
-La versión web navegador no puede guardar la sesión (cookies de terceros + CORS); ahí los favoritos siguen siendo locales.
+La versión web navegador no puede guardar la sesión (cookies de terceros + CORS), por eso la pantalla de acceso te indica cómo obtener la app de escritorio.
 
 ## 🏗️ Arquitectura
 

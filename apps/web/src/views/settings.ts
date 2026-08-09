@@ -2,9 +2,9 @@ import { register } from '../core/router'
 import { getSettings, updateSettings, type Theme } from '../core/settings'
 import { saveHistory, saveLikes } from '../core/library'
 import { player } from '../player/player'
-import { resetAPI, getAPI } from '../api'
+import { resetAPI } from '../api'
 import { desktopInvoke, isDesktop } from '../api/auth'
-import type { User } from '@soundlite/api'
+import { accountStore, refreshAccount, type AccountState } from '../core/account'
 import { avatarEl } from '../ui/artwork'
 import { h, iconEl, svgIcon } from '../ui/el'
 import { toast, toastErr } from '../ui/toast'
@@ -81,21 +81,18 @@ register('settings', (_route, container) => {
     )
   } else {
     const statusRow = h('div', { className: 'account-status' })
-    const statusText = h('span', { className: 'text-dim' })
-    statusRow.appendChild(statusText)
     const actions = h('div', { className: 'data-actions' })
     accountCard.appendChild(statusRow)
     accountCard.appendChild(actions)
 
-    const renderAccount = (user: User | null, checking: boolean): void => {
+    const renderAccount = (state: AccountState): void => {
       statusRow.replaceChildren()
       actions.replaceChildren()
-      if (checking) {
-        statusText.textContent = 'Comprobando sesión…'
-        statusRow.appendChild(statusText)
+      if (state.status === 'unknown') {
+        statusRow.appendChild(h('span', { className: 'text-dim' }, 'Comprobando sesión…'))
         return
       }
-      if (!user) {
+      if (state.status !== 'ready' || !state.user) {
         statusRow.appendChild(h('span', { className: 'text-dim' }, 'No has iniciado sesión.'))
         const loginBtn = h('button', { className: 'btn btn-primary btn-sm' }, 'Iniciar sesión con SoundCloud')
         loginBtn.addEventListener('click', () => {
@@ -104,6 +101,7 @@ register('settings', (_route, container) => {
         actions.appendChild(loginBtn)
         return
       }
+      const user = state.user
       const row = h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } })
       row.appendChild(avatarEl(user.avatar_url, user.username, 40))
       const info = h('div', { style: { display: 'flex', flexDirection: 'column' } })
@@ -114,18 +112,22 @@ register('settings', (_route, container) => {
       const logoutBtn = h('button', { className: 'btn btn-ghost btn-sm' }, 'Cerrar sesión')
       logoutBtn.addEventListener('click', () => {
         void desktopInvoke('logout_window').catch(() => toastErr('No se pudo cerrar sesión'))
-        toast('Ventana de sesión abierta para cerrar tu cuenta')
+        toast('Ventana abierta para cerrar tu cuenta en SoundCloud')
+        setTimeout(() => void refreshAccount(), 2500)
       })
       actions.appendChild(logoutBtn)
       const likesBtn = h('a', { className: 'btn btn-ghost btn-sm', href: '#/likes' }, 'Ver tus likes')
       actions.appendChild(likesBtn)
     }
 
-    renderAccount(null, true)
-    getAPI()
-      .me()
-      .then((user) => renderAccount(user, false))
-      .catch(() => renderAccount(null, false))
+    const unsub = accountStore.subscribe((state) => {
+      if (!container.isConnected) {
+        unsub()
+        return
+      }
+      renderAccount(state)
+    })
+    void refreshAccount()
   }
 
   const proxyField = h('div', { className: 'field' })

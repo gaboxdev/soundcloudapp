@@ -40,6 +40,14 @@ SoundCloud no permite registrar apps OAuth nuevas → la sesión se hace con el 
 
 En web (`ProxyTransport`) `authedRequest` lanza error → las vistas deben comprobar `isDesktop()` (`apps/web/src/api/auth.ts`) antes de ofrecer login.
 
+### Puerta de entrada (login obligatorio)
+
+Al abrir la app se muestra la pantalla de acceso (`src/components/logingate.ts`) cubriendo toda la UI hasta que haya sesión: sin sesión no se puede usar la app.
+
+- `accountStore` (`src/core/account.ts`): estado `{ status: 'unknown'|'guest'|'ready', user }`. `refreshAccount()` lo actualiza (GET /me). `watchSessionWindow()` re-comprueba al cerrar la ventana `sl-login`.
+- La gate hace polling de `refreshAccount()` cada 2.5s mientras no haya sesión (solo desktop). En web muestra un aviso + enlace a la app de escritorio.
+- `settings.ts` y la gate se suscriben a `accountStore` (patrón auto-descarte).
+
 ### Core (`@soundlite/api`)
 
 - `Transport` (interfaz): `getClientId()`, `getJSON(url)`, `rewriteHref(href)`, `authedRequest(method, url, body?)` (solo Tauri; en web lanza error). Implementaciones: `ProxyTransport(base)`, `TauriTransport`.
