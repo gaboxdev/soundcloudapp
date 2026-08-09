@@ -1,6 +1,6 @@
 import type { User } from '@soundlite/api'
 import { getAPI } from '../api'
-import { isDesktop } from '../api/auth'
+import { desktopInvoke, isDesktop } from '../api/auth'
 import { createStore } from './store'
 
 export type AccountStatus = 'unknown' | 'guest' | 'ready'
@@ -14,6 +14,11 @@ export const accountStore = createStore<AccountState>({ status: 'unknown', user:
 
 let refreshing: Promise<void> | null = null
 
+function debugLog(message: string): void {
+  if (!isDesktop()) return
+  desktopInvoke('log_debug', { message }).catch(() => {})
+}
+
 export function refreshAccount(): Promise<void> {
   if (refreshing) return refreshing
   refreshing = (async () => {
@@ -23,8 +28,15 @@ export function refreshAccount(): Promise<void> {
         return
       }
       const user = await getAPI().me()
-      accountStore.set(user ? { status: 'ready', user } : { status: 'guest', user: null })
-    } catch {
+      if (user) {
+        debugLog(`me() ok: ${user.username}`)
+        accountStore.set({ status: 'ready', user })
+      } else {
+        debugLog('me() sin sesión')
+        accountStore.set({ status: 'guest', user: null })
+      }
+    } catch (error) {
+      debugLog(`me() error: ${String(error)}`)
       accountStore.set({ status: 'guest', user: null })
     } finally {
       refreshing = null
@@ -35,12 +47,9 @@ export function refreshAccount(): Promise<void> {
 
 export function watchSessionWindow(): void {
   if (!isDesktop()) return
-  void import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => {
-    getCurrentWebviewWindow()
-      .listen('tauri://window-closed', (event) => {
-        const payload = event.payload as { label?: string }
-        if (payload.label === 'sl-login') void refreshAccount()
-      })
-      .catch(() => {})
+  void import('@tauri-apps/api/event').then(({ listen }) => {
+    listen('sl-session-check', () => {
+      void refreshAccount()
+    }).catch(() => {})
   })
 }

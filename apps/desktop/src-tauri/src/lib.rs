@@ -1,11 +1,13 @@
 use std::collections::HashMap;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use regex::Regex;
 use tauri::webview::{NewWindowFeatures, NewWindowResponse, PageLoadEvent};
-use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tokio::sync::oneshot;
 use url::Url;
 
@@ -19,7 +21,26 @@ static POPUP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 struct ClientIdState(Mutex<Option<(String, Instant)>>);
 
-struct BridgeState(Mutex<Option<oneshot::Sender<Result<String, String>>>>);
+struct BridgeState {
+    pending: Mutex<Option<oneshot::Sender<Result<String, String>>>>,
+    lock: tokio::sync::Mutex<()>,
+}
+
+fn debug_log(message: &str) {
+    let path = std::env::temp_dir().join("soundlite-debug.log");
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    if let Ok(metadata) = std::fs::metadata(&path) {
+        if metadata.len() > 512 * 1024 {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "[{timestamp}] {message}");
+    }
+}
 
 fn close_login_windows_in(app: &AppHandle) {
     let labels: Vec<String> = app
@@ -30,9 +51,38 @@ fn close_login_windows_in(app: &AppHandle) {
         .collect();
     for label in labels {
         if let Some(window) = app.get_webview_window(&label) {
+            debug_log(&format!("cerrando ventana {label}"));
             let _ = window.close();
         }
     }
+    let _ = app.emit("sl-session-check", ());
+}
+
+async fn wait_bridge_ready(window: &WebviewWindow) -> bool {
+    for _ in 0..16 {
+        let is_ready = window
+            .url()
+            .ok()
+            .map(|current| current.as_str().starts_with(BRIDGE_BASE_URL))
+            .unwrap_or(false);
+        if is_ready {
+            return true;
+        }
+        let _ = window.navigate(BRIDGE_BASE_URL.parse().unwrap());
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    window
+        .url()
+        .ok()
+        .map(|current| current.as_str().starts_with(BRIDGE_BASE_URL))
+        .unwrap_or(false)
+}
+
+fn app_base_url(app: &AppHandle) -> String {
+    app.get_webview_window("main")
+        .and_then(|main| main.url().ok())
+        .map(|main| format!("{}//{}", main.scheme(), main.host_str().unwrap_or("localhost")))
+        .unwrap_or_else(|| "tauri://localhost".to_string())
 }
 
 fn allow_popup(
@@ -175,20 +225,32 @@ setInterval(check,2000);check();
     script.push_str(
         r#"(function(){
 if(window.location.hostname!=="soundcloud.com")return;
+var path=window.location.pathname;
 var KEY="sl_login_close_hint";
-try{if(sessionStorage.getItem(KEY))return;}catch(e){}
-function show(){
+var tip=path.indexOf("login")!==-1||path.indexOf("sign")!==-1;
+if(tip&&!sessionStorage.getItem("sl_login_tip")){
 var el=document.createElement("div");
-el.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;background:#18181b;color:#f4f4f6;border:1px solid #2ecc71;border-radius:10px;padding:10px 14px;font:13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.45);display:flex;align-items:center;gap:10px;";
-el.innerHTML="¿Ya ves tu sesión de SoundCloud abierta? Cierra esta ventana y Soundlite te dejará entrar automáticamente.";
+el.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;background:#18181b;color:#f4f4f6;border:1px solid #ff5500;border-radius:10px;padding:10px 14px;font:13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.45);display:flex;align-items:center;gap:10px;";
+el.innerHTML="Para entrar con Google o Apple puede pedirte un <strong>passkey</strong>, que no funciona en esta app. Usa <strong>email + contraseña</strong> (o «usar otra contraseña» en Google).";
 var btn=document.createElement("button");
 btn.textContent="Entendido";
-btn.style.cssText="flex-shrink:0;background:#2ecc71;color:#fff;border:none;border-radius:999px;padding:5px 12px;font:600 12px -apple-system,sans-serif;cursor:pointer;";
-btn.onclick=function(){try{sessionStorage.setItem(KEY,"1");}catch(e){}el.remove();};
+btn.style.cssText="flex-shrink:0;background:#ff5500;color:#fff;border:none;border-radius:999px;padding:5px 12px;font:600 12px -apple-system,sans-serif;cursor:pointer;";
+btn.onclick=function(){try{sessionStorage.setItem("sl_login_tip","1");}catch(e){}el.remove();};
 el.appendChild(btn);
 document.documentElement.appendChild(el);
+return;
 }
-if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",show);}else{show();}
+if(tip)return;
+try{if(sessionStorage.getItem(KEY))return;}catch(e){}
+var el2=document.createElement("div");
+el2.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;background:#18181b;color:#f4f4f6;border:1px solid #2ecc71;border-radius:10px;padding:10px 14px;font:13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.45);display:flex;align-items:center;gap:10px;";
+el2.innerHTML="¿Ya ves tu sesión de SoundCloud abierta? Cierra esta ventana y Soundlite te dejará entrar automáticamente.";
+var btn2=document.createElement("button");
+btn2.textContent="Entendido";
+btn2.style.cssText="flex-shrink:0;background:#2ecc71;color:#fff;border:none;border-radius:999px;padding:5px 12px;font:600 12px -apple-system,sans-serif;cursor:pointer;";
+btn2.onclick=function(){try{sessionStorage.setItem(KEY,"1");}catch(e){}el2.remove();};
+el2.appendChild(btn2);
+document.documentElement.appendChild(el2);
 })();
 "#,
     );
@@ -281,54 +343,86 @@ async fn authed_request(
     let window = app
         .get_webview_window(BRIDGE_LABEL)
         .ok_or_else(|| "puente de sesión no disponible".to_string())?;
+    debug_log(&format!("authed {method} {url}"));
 
-    let ready = window
-        .url()
-        .ok()
-        .map(|current| current.as_str().starts_with(BRIDGE_BASE_URL))
-        .unwrap_or(false);
-    if !ready {
-        let _ = window.navigate(BRIDGE_BASE_URL.parse().unwrap());
-        tokio::time::sleep(Duration::from_millis(600)).await;
+    let _request_guard = state.lock.lock().await;
+    if !wait_bridge_ready(&window).await {
+        debug_log("authed: puente no listo");
+        return Err("puente de sesión no listo".to_string());
     }
 
-    let base = app
-        .get_webview_window("main")
-        .and_then(|main| main.url().ok())
-        .map(|main| format!("{}//{}", main.scheme(), main.host_str().unwrap_or("localhost")))
-        .unwrap_or_else(|| "tauri://localhost".to_string());
-
-    let (tx, rx) = oneshot::channel();
-    *state.0.lock().map_err(|_| "lock del puente".to_string())? = Some(tx);
-
+    let base = app_base_url(&app);
     let method_json = serde_json::to_string(&method).map_err(|error| error.to_string())?;
     let url_json = serde_json::to_string(&url).map_err(|error| error.to_string())?;
     let body_js = match &body {
         Some(value) => serde_json::to_string(value).unwrap_or_else(|_| "null".into()),
         None => "undefined".into(),
     };
-    let js = format!(
-        "fetch({url},{opts}).then(r=>r.text().then(t=>location.href='{base}/auth-bridge?status='+r.status+'&body='+encodeURIComponent(t))).catch(e=>location.href='{base}/auth-bridge?status=0&body='+encodeURIComponent(String(e)));",
-        url = url_json,
-        opts = format!(
-            "{{method:{method},credentials:'include',headers:{{'Content-Type':'application/json'}},body:{body}}}",
-            method = method_json,
-            body = body_js,
-        ),
-        base = base,
-    );
-    window.eval(&js).map_err(|error| error.to_string())?;
 
-    let result = tokio::time::timeout(Duration::from_secs(20), rx)
-        .await
-        .map_err(|_| "timeout del puente de sesión".to_string())?
-        .map_err(|_| "puente de sesión cerrado".to_string())?;
-    let _ = state.0.lock().map(|mut slot| slot.take());
-    result
+    for attempt in 0..2 {
+        let (tx, rx) = oneshot::channel();
+        *state.pending.lock().map_err(|_| "lock del puente".to_string())? = Some(tx);
+
+        let js = format!(
+            "fetch({url},{opts}).then(r=>r.text().then(t=>location.href='{base}/auth-bridge?status='+r.status+'&body='+encodeURIComponent(t))).catch(e=>location.href='{base}/auth-bridge?status=0&body='+encodeURIComponent(String(e)));",
+            url = url_json,
+            opts = format!(
+                "{{method:{method},credentials:'include',headers:{{'Content-Type':'application/json'}},body:{body}}}",
+                method = method_json,
+                body = body_js,
+            ),
+            base = base,
+        );
+        debug_log(&format!("authed: eval intento {}", attempt + 1));
+        if let Err(error) = window.eval(&js) {
+            debug_log(&format!("authed: eval falló: {error}"));
+            let _ = state.pending.lock().map(|mut slot| slot.take());
+            continue;
+        }
+
+        let result = tokio::time::timeout(Duration::from_secs(15), rx)
+            .await
+            .map_err(|_| "timeout del puente de sesión".to_string())
+            .and_then(|inner| inner.map_err(|_| "puente de sesión cerrado".to_string()));
+        let _ = state.pending.lock().map(|mut slot| slot.take());
+        match result {
+            Ok(Ok(response)) => {
+                debug_log(&format!("authed: respuesta {response:.80}"));
+                return Ok(response);
+            }
+            Ok(Err(error)) => {
+                debug_log(&format!("authed: error del puente: {error}"));
+                if attempt == 0 {
+                    let _ = window.navigate(BRIDGE_BASE_URL.parse().unwrap());
+                    tokio::time::sleep(Duration::from_millis(1200)).await;
+                    continue;
+                }
+                return Err(error);
+            }
+            Err(timeout_error) => {
+                debug_log(&format!("authed: {timeout_error}"));
+                if attempt == 0 {
+                    let _ = window.navigate(BRIDGE_BASE_URL.parse().unwrap());
+                    tokio::time::sleep(Duration::from_millis(1200)).await;
+                    continue;
+                }
+                return Err(timeout_error);
+            }
+        }
+    }
+    Err("no se pudo completar la petición autenticada".to_string())
+}
+
+#[tauri::command]
+fn log_debug(message: String) {
+    debug_log(&message);
 }
 
 pub fn run() {
-    let bridge_state = Arc::new(BridgeState(Mutex::new(None)));
+    let bridge_state = Arc::new(BridgeState {
+        pending: Mutex::new(None),
+        lock: tokio::sync::Mutex::new(()),
+    });
     let bridge_for_setup = bridge_state.clone();
 
     tauri::Builder::default()
@@ -365,12 +459,67 @@ pub fn run() {
                 } else {
                     Ok(format!("{status}\n{body}"))
                 };
-                if let Some(tx) = state_for_window.0.lock().unwrap().take() {
+                debug_log(&format!("auth-bridge recibido: {result:?}"));
+                if let Some(tx) = state_for_window.pending.lock().unwrap().take() {
                     let _ = tx.send(result);
                 }
                 let _ = webview.navigate(BRIDGE_BASE_URL.parse().unwrap());
             })
             .build()?;
+
+            if std::env::var("SOUNDLITE_SELFTEST").is_ok() {
+                debug_log("SELFTEST: comenzando");
+                let app_for_test = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    let client_id_state: State<ClientIdState> = app_for_test.state();
+                    match get_client_id(client_id_state).await {
+                        Ok(client_id) => debug_log(&format!("SELFTEST: client_id ok {client_id}")),
+                        Err(error) => debug_log(&format!("SELFTEST: client_id error {error}")),
+                    }
+                    let url = format!(
+                        "https://api-v2.soundcloud.com/me?client_id={}",
+                        app_for_test
+                            .state::<ClientIdState>()
+                            .0
+                            .lock()
+                            .unwrap()
+                            .as_ref()
+                            .map(|(id, _)| id.clone())
+                            .unwrap_or_default()
+                    );
+                    let bridge_state: State<Arc<BridgeState>> = app_for_test.state();
+                    match authed_request(
+                        app_for_test.clone(),
+                        bridge_state,
+                        "GET".into(),
+                        url,
+                        None,
+                    )
+                    .await
+                    {
+                        Ok(response) => {
+                            debug_log(&format!("SELFTEST: /me OK -> {response:.150}"))
+                        }
+                        Err(error) => debug_log(&format!("SELFTEST: /me error -> {error}")),
+                    }
+                    if let Err(error) = login_window(app_for_test.clone(), app_for_test.state()).await {
+                        debug_log(&format!("SELFTEST: login_window error {error}"));
+                    }
+                    debug_log("SELFTEST: ventana de login abierta");
+                    tokio::time::sleep(Duration::from_secs(3)).await;
+                    let labels: Vec<String> = app_for_test
+                        .webview_windows()
+                        .keys()
+                        .map(|label| label.clone())
+                        .collect();
+                    debug_log(&format!("SELFTEST: ventanas {labels:?}"));
+                    close_login_windows_in(&app_for_test);
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    debug_log("SELFTEST: terminado");
+                    app_for_test.exit(0);
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -380,6 +529,7 @@ pub fn run() {
             login_window,
             logout_window,
             close_login_windows,
+            log_debug,
         ])
         .run(tauri::generate_context!())
         .expect("error al ejecutar Soundlite");

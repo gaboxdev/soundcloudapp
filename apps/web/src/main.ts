@@ -1,6 +1,7 @@
 import './styles/design.css'
 import { bootstrapApp } from './app'
 import { initSettings } from './core/settings'
+import { isTauri } from '@soundlite/api'
 import './views/home'
 import './views/charts'
 import './views/search'
@@ -11,11 +12,23 @@ import './views/queue'
 import './views/likes'
 import './views/settings'
 
-initSettings()
-bootstrapApp()
-
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {})
-  })
+async function boot(): Promise<void> {
+  initSettings()
+  if (isTauri()) {
+    try {
+      const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+      const label = getCurrentWebviewWindow().label
+      if (label && label !== 'main') return
+    } catch {
+      // sin etiqueta de ventana: contexto navegador
+    }
+  }
+  bootstrapApp()
+  if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {})
+    })
+  }
 }
+
+void boot()
