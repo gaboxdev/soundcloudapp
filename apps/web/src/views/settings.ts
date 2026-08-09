@@ -131,7 +131,7 @@ register('settings', (_route, container) => {
   )
   const ghLink = h(
     'a',
-    { className: 'btn btn-ghost btn-sm', href: 'https://github.com/', target: '_blank', rel: 'noopener' },
+    { className: 'btn btn-ghost btn-sm', href: 'https://github.com/gaboxdev/soundcloudapp', target: '_blank', rel: 'noopener' },
     [iconEl('github', 16), 'Código fuente'],
   )
   const aboutActions = h('div', { className: 'about-actions' })
