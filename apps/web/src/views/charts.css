@@ -1,0 +1,13 @@
+.charts-tabs {
+  margin-bottom: 10px;
+}
+
+.charts-genres {
+  margin-bottom: 20px;
+}
+
+.charts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}

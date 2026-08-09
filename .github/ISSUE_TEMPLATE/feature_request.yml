@@ -1,0 +1,40 @@
+name: Solicitud de funcionalidad
+description: Una idea para mejorar Soundlite
+title: "[Idea] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: Qué problema resuelve
+      description: Describe la necesidad o el caso de uso
+      placeholder: "Ej.: quiero ordenar mi cola arrastrando canciones…"
+    validations:
+      required: true
+  - type: textarea
+    id: solucion
+    attributes:
+      label: Solución propuesta
+      description: Qué te imaginas
+    validations:
+      required: true
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: Alternativas consideradas
+      description: Otras formas de resolverlo (o si lo estás solucionando tú mismo)
+    validations:
+      required: false
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Ámbito
+      description: Dónde encajaría la funcionalidad
+      options:
+        - Web
+        - Escritorio
+        - Ambos
+        - No sé
+      default: 3
+    validations:
+      required: false

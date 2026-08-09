@@ -1,0 +1,18 @@
+{
+  "name": "@soundlite/api",
+  "version": "0.1.0",
+  "description": "Cliente tipado de la API pública v2 de SoundCloud para Soundlite",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

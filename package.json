@@ -1,0 +1,22 @@
+{
+  "name": "soundlite",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Soundlite — un cliente de SoundCloud súper ligero, rápido y open source",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "proxy/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w apps/web",
+    "dev:desktop": "npm run dev:desktop -w apps/desktop",
+    "build": "npm run build -w apps/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "preview": "npm run preview -w apps/web"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

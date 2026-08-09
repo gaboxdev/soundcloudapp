@@ -1,0 +1,182 @@
+.user-view {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.profile-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.profile-head .page-error {
+  margin: 8px auto;
+}
+
+.profile-avatar {
+  flex-shrink: 0;
+}
+
+.profile-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.profile-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.profile-name .verified {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.profile-fullname {
+  font-size: 14px;
+}
+
+.profile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  font-size: 14px;
+}
+
+.profile-city {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.profile-city .icon {
+  color: var(--text3);
+}
+
+.profile-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip-static {
+  cursor: default;
+}
+
+.profile-skel {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+}
+
+.sk-avatar {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sk-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.user-tabs {
+  flex-wrap: wrap;
+}
+
+.user-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-results.playlist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.playlist-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transition: background 0.15s, border-color 0.15s, transform 0.12s;
+  min-width: 0;
+}
+
+.playlist-card:hover {
+  background: var(--surface2);
+  border-color: var(--border2);
+  transform: translateY(-2px);
+}
+
+.playlist-card .art-frame {
+  width: 56px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.user-results .playlist-card {
+  flex-direction: row;
+  align-items: center;
+}
+
+.user-results.playlist-grid .playlist-card {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.user-results.playlist-grid .playlist-card .art-frame {
+  width: 100%;
+}
+
+.pl-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pl-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pl-count {
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .profile-head {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .profile-meta,
+  .profile-chips {
+    justify-content: center;
+  }
+
+  .profile-skel {
+    flex-direction: column;
+  }
+}

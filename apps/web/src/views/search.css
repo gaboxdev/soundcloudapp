@@ -1,0 +1,154 @@
+.search-view {
+  max-width: 680px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.search-input-wrap {
+  position: relative;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 999px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.search-box:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.search-box > .icon {
+  color: var(--text3);
+  flex-shrink: 0;
+}
+
+.search-field {
+  border: none;
+  background: none;
+  box-shadow: none;
+  padding: 10px 0;
+  font-size: 20px;
+  font-weight: 600;
+  outline: none;
+  flex: 1;
+  min-width: 0;
+}
+
+.search-field:focus {
+  border: none;
+  box-shadow: none;
+}
+
+.search-field::placeholder {
+  color: var(--text3);
+  font-weight: 400;
+  font-size: 17px;
+}
+
+.suggest-box {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.suggest-box:not(:empty) {
+  display: flex;
+}
+
+.suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  color: var(--text2);
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+
+.suggest-item:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.suggest-item .icon {
+  color: var(--text3);
+  flex-shrink: 0;
+}
+
+.search-tabs {
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.result-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s;
+}
+
+.result-row:hover {
+  background: var(--surface2);
+}
+
+.result-row .meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.result-row .title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.result-row .sub {
+  font-size: 13px;
+}
+
+.result-row .verified {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 6px;
+  color: var(--accent);
+}
+
+.playlist-row .art-frame {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
