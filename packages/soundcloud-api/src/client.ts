@@ -11,7 +11,7 @@ import type {
   Track,
   User,
 } from './types'
-import { API_BASE, resetClientIdCache, type Transport } from './transport'
+import { API_BASE, ApiError, isTauri, resetClientIdCache, type Transport } from './transport'
 
 export interface SearchFilters {
   track?: boolean
@@ -30,6 +30,14 @@ export interface StreamTarget {
   protocol: StreamProtocol
   mimeType: string
   snipped?: boolean
+}
+
+function unwrapLike(item: unknown): Searchable[] {
+  const rec = item as Record<string, unknown> & { kind?: string; type?: string; track?: unknown; playlist?: unknown; system_playlist?: unknown }
+  if (rec.track && typeof rec.track === 'object') return [rec.track as Searchable]
+  if (rec.playlist && typeof rec.playlist === 'object') return [rec.playlist as Searchable]
+  if (rec.system_playlist && typeof rec.system_playlist === 'object') return [rec.system_playlist as Searchable]
+  return [item as Searchable]
 }
 
 const GENRES: Record<string, string> = {
@@ -60,32 +68,42 @@ const GENRES: Record<string, string> = {
   folk: 'soundcloud:genres:folk',
   reggae: 'soundcloud:genres:reggae',
   latin: 'soundcloud:genres:latin',
-  punk: 'soundcloud:genres:punks',
+  punk: 'soundcloud:genres:punk',
 }
+
+const ALL_MUSIC = 'all-music'
+
+const GENRE_SLUGS: string[] = Object.keys(GENRES).filter((slug) => slug !== ALL_MUSIC)
+
+const IDS_BATCH_SIZE = 50
 
 export class SoundCloudAPI {
   constructor(private readonly transport: Transport) {}
 
-  private async buildUrl(path: string, params: Record<string, string | number | boolean | undefined>): Promise<string> {
-    const qs = new URLSearchParams()
+  private async buildUrl(
+    path: string,
+    params: Record<string, string | number | boolean | undefined>,
+    refresh = false,
+  ): Promise<string> {
+    const base = path.startsWith('http') ? new URL(path) : new URL(`${API_BASE}${path}`)
     for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined) qs.set(key, String(value))
+      if (value !== undefined) base.searchParams.set(key, String(value))
     }
-    qs.set('client_id', await this.transport.getClientId())
-    return `${API_BASE}${path}?${qs.toString()}`
+    base.searchParams.set('client_id', await this.transport.getClientId(refresh))
+    return base.toString()
   }
 
   private async get<T>(path: string, params: Record<string, string | number | boolean | undefined> = {}): Promise<T> {
-    const doFetch = async (): Promise<T> => {
-      const url = await this.buildUrl(path, params)
+    const doFetch = async (refresh: boolean): Promise<T> => {
+      const url = await this.buildUrl(path, params, refresh)
       return (await this.transport.getJSON(url)) as T
     }
     try {
-      return await doFetch()
+      return await doFetch(false)
     } catch (error) {
-      if (String(error).includes('401')) {
+      if (error instanceof ApiError && error.status === 401) {
         resetClientIdCache()
-        return doFetch()
+        return doFetch(true)
       }
       throw error
     }
@@ -104,6 +122,22 @@ export class SoundCloudAPI {
       if (typeof value === 'boolean' && value) params[`filter.${key}`] = true
     }
     return this.mapPaged<Searchable>(await this.get('/search', params))
+  }
+
+  async searchTracks(q: string, offset = 0, limit = 20): Promise<SearchResponse<Track>> {
+    return this.mapPaged<Track>(await this.get('/search/tracks', { q, offset, limit }))
+  }
+
+  async searchPlaylists(q: string, offset = 0, limit = 20): Promise<SearchResponse<Playlist>> {
+    return this.mapPaged<Playlist>(await this.get('/search/playlists', { q, offset, limit }))
+  }
+
+  async searchAlbums(q: string, offset = 0, limit = 20): Promise<SearchResponse<Playlist>> {
+    return this.mapPaged<Playlist>(await this.get('/search/albums', { q, offset, limit }))
+  }
+
+  async searchUsers(q: string, offset = 0, limit = 20): Promise<SearchResponse<User>> {
+    return this.mapPaged<User>(await this.get('/search/users', { q, offset, limit }))
   }
 
   async searchSuggestions(q: string, limit = 6): Promise<string[]> {
@@ -132,15 +166,49 @@ export class SoundCloudAPI {
   }
 
   async userContent(id: number, kind: UserContentKind, offset = 0, limit = 30): Promise<SearchResponse<Searchable>> {
-    return this.mapPaged<Searchable>(await this.get(`/users/${id}/${kind}`, { offset, limit }))
+    const response = await this.get<SearchResponse<unknown>>(`/users/${id}/${kind}`, { offset, limit })
+    const paged = this.mapPaged<Searchable>(response)
+    if (kind !== 'likes') return paged
+    return { ...paged, collection: ((response.collection ?? []) as unknown[]).flatMap(unwrapLike) }
+  }
+
+  async tracksByIds(ids: number[]): Promise<Track[]> {
+    const unique: number[] = []
+    const seen = new Set<number>()
+    for (const id of ids) {
+      if (!seen.has(id)) {
+        seen.add(id)
+        unique.push(id)
+      }
+    }
+    if (unique.length === 0) return []
+    const batches: Promise<Track[]>[] = []
+    for (let start = 0; start < unique.length; start += IDS_BATCH_SIZE) {
+      const batch = unique.slice(start, start + IDS_BATCH_SIZE)
+      batches.push(this.get<Track[]>('/tracks', { ids: batch.join(',') }))
+    }
+    const found = new Map<number, Track>()
+    for (const chunk of await Promise.all(batches)) {
+      for (const track of chunk ?? []) found.set(track.id, track)
+    }
+    const ordered: Track[] = []
+    for (const id of ids) {
+      const track = found.get(id)
+      if (track) ordered.push(track)
+    }
+    return ordered
   }
 
   async charts(genre = 'soundcloud:genres:all-music', kind = 'trending', offset = 0, limit = 20): Promise<SearchResponse<ChartItem>> {
     return this.mapPaged<ChartItem>(await this.get('/charts', { genre, kind, offset, limit }))
   }
 
-  async featured(genre = 'all-music', offset = 0, limit = 20): Promise<SearchResponse<Track>> {
+  async featured(genre = ALL_MUSIC, offset = 0, limit = 20): Promise<SearchResponse<Track>> {
     return this.mapPaged<Track>(await this.get(`/featured_tracks/top/${genre}`, { offset, limit }))
+  }
+
+  async recentTracks(slug: string, limit = 20): Promise<SearchResponse<Track>> {
+    return this.mapPaged<Track>(await this.get(`/recent-tracks/${encodeURIComponent(slug)}`, { limit }))
   }
 
   async mixedSelections(limit = 8): Promise<Selection[]> {
@@ -161,15 +229,31 @@ export class SoundCloudAPI {
       const url = await this.buildUrl('/me', {})
       return (await this.transport.authedRequest('GET', url)) as User
     } catch (error) {
-      if (String(error).includes('401') || String(error).includes('403')) return null
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) return null
       throw error
     }
   }
 
-  async meLikes(offset = 0, limit = 50): Promise<SearchResponse<Searchable>> {
-    const url = await this.buildUrl('/me/library/all', { offset, limit })
-    const response = (await this.transport.authedRequest('GET', url)) as SearchResponse<unknown>
-    return this.mapPaged<Searchable>(response)
+  async meLikes(userId: number, limit = 50, next: string | null = null): Promise<SearchResponse<Searchable>> {
+    const built = next ? await this.buildUrl(next, {}) : await this.buildUrl(`/users/${userId}/likes`, { limit })
+    const response = (await this.transport.authedRequest('GET', built)) as SearchResponse<unknown>
+    const collection = ((response.collection ?? []) as unknown[]).flatMap(unwrapLike)
+    return {
+      ...response,
+      collection,
+      next_href: response.next_href ? this.transport.rewriteHref(response.next_href) : null,
+    } as SearchResponse<Searchable>
+  }
+
+  async mePlaylists(userId: number, limit = 50, next: string | null = null): Promise<SearchResponse<Searchable>> {
+    const built = next ? await this.buildUrl(next, {}) : await this.buildUrl(`/users/${userId}/playlists`, { limit })
+    const response = (await this.transport.authedRequest('GET', built)) as SearchResponse<unknown>
+    const collection = ((response.collection ?? []) as unknown[]).flatMap(unwrapLike)
+    return {
+      ...response,
+      collection,
+      next_href: response.next_href ? this.transport.rewriteHref(response.next_href) : null,
+    } as SearchResponse<Searchable>
   }
 
   async toggleAccountLike(trackId: number, liked: boolean): Promise<void> {
@@ -179,21 +263,48 @@ export class SoundCloudAPI {
   }
 
   async streamUrl(track: Track, preferred: StreamProtocol = 'progressive'): Promise<StreamTarget | null> {
-    if (!track.streamable) return null
     const transcodings = track.media?.transcodings ?? []
     if (transcodings.length === 0) return null
-    const byProtocol = (protocol: StreamProtocol) => transcodings.find((t) => t.format.protocol === protocol)
-    const selected =
-      preferred === 'progressive'
-        ? byProtocol('progressive') ?? byProtocol('hls')
-        : byProtocol('hls') ?? byProtocol('progressive')
-    if (!selected) return null
-    const envelope = (await this.get<StreamUrlEnvelope>(selected.url)) as StreamUrlEnvelope
-    return {
-      url: envelope.url,
-      protocol: selected.format.protocol,
-      mimeType: selected.format.mime_type,
-      snipped: selected.snipped ?? false,
+    const byProtocol = (protocol: StreamProtocol) => transcodings.filter((t) => t.format.protocol === protocol)
+    const ordered =
+      preferred === 'progressive' ? [...byProtocol('progressive'), ...byProtocol('hls')] : [...byProtocol('hls'), ...byProtocol('progressive')]
+    if (ordered.length === 0) return null
+    for (const selected of ordered) {
+      const envelope = await this.streamEnvelope(selected.url)
+      if (envelope?.url) {
+        return {
+          url: envelope.url,
+          protocol: selected.format.protocol,
+          mimeType: selected.format.mime_type,
+          snipped: selected.snipped ?? false,
+        }
+      }
+    }
+    return null
+  }
+
+  private async streamEnvelope(url: string): Promise<StreamUrlEnvelope | null> {
+    const anonymous = await this.tryAnonymous<StreamUrlEnvelope>(url)
+    if (anonymous?.url) return anonymous
+    const authed = await this.tryAuthed<StreamUrlEnvelope>(url)
+    return authed?.url ? authed : null
+  }
+
+  private async tryAnonymous<T>(path: string): Promise<T | null> {
+    try {
+      return await this.get<T>(path)
+    } catch {
+      return null
+    }
+  }
+
+  private async tryAuthed<T>(path: string): Promise<T | null> {
+    if (!isTauri()) return null
+    try {
+      const url = await this.buildUrl(path, {})
+      return (await this.transport.authedRequest('GET', url)) as T
+    } catch {
+      return null
     }
   }
 
@@ -202,8 +313,12 @@ export class SoundCloudAPI {
     try {
       const res = await fetch(track.waveform_url)
       if (!res.ok) return null
-      const data = (await res.json()) as { samples?: number[] }
-      return data.samples ?? null
+      const data = (await res.json()) as { samples?: number[]; height?: number }
+      const samples = data.samples
+      if (!Array.isArray(samples) || samples.length === 0) return null
+      const peak = data.height && data.height > 0 ? data.height : Math.max(...samples)
+      if (!Number.isFinite(peak) || peak <= 0) return null
+      return samples.map((value) => Math.min(1, Math.max(0, value / peak)))
     } catch {
       return null
     }
@@ -211,19 +326,18 @@ export class SoundCloudAPI {
 
   async downloadUrl(track: Track): Promise<string | null> {
     if (!track.downloadable) return null
-    try {
-      const envelope = (await this.get<DownloadUrlEnvelope>(`/tracks/${track.id}/downloads`)) as DownloadUrlEnvelope
-      return envelope.download_url ?? null
-    } catch {
-      return null
-    }
+    const path = `/tracks/${track.id}/downloads`
+    const anonymous = await this.tryAnonymous<DownloadUrlEnvelope>(path)
+    if (anonymous?.download_url) return anonymous.download_url
+    const authed = await this.tryAuthed<DownloadUrlEnvelope>(path)
+    return authed?.download_url ?? null
   }
 
   genreUrn(slug: string): string {
     return GENRES[slug] ?? `soundcloud:genres:${slug}`
   }
 
-  async topGenres(): Promise<string[]> {
-    return Object.keys(GENRES)
+  genres(): string[] {
+    return [...GENRE_SLUGS]
   }
 }

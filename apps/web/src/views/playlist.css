@@ -1,16 +1,16 @@
-.playlist-header {
+.playlist-view .playlist-header {
   display: flex;
   gap: 28px;
   align-items: flex-start;
   margin-bottom: 24px;
 }
 
-.playlist-art {
+.playlist-view .playlist-art {
   width: 220px;
   flex-shrink: 0;
 }
 
-.playlist-info {
+.playlist-view .playlist-info {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -18,50 +18,105 @@
   gap: 12px;
 }
 
-.artist-link {
+.playlist-view .artist-link {
   font-size: 16px;
   font-weight: 600;
   color: var(--text2);
 }
 
-.playlist-desc {
+.playlist-view .playlist-kind {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.playlist-view .playlist-desc {
   margin: 0;
   max-width: 640px;
   white-space: pre-line;
   overflow-wrap: break-word;
 }
 
-.playlist-actions {
+.playlist-view .playlist-actions {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
 
-.playlist-tracks {
+.playlist-view .track-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.playlist-view .playlist-tracks {
   margin-bottom: 8px;
 }
 
-.playlist-note {
+.playlist-view .page-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.playlist-view .load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 0;
+  text-align: center;
+}
+
+.playlist-view .load-error p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.playlist-view .playlist-note {
   margin: 8px 4px;
   font-size: 13px;
 }
 
-.sk-art-big {
+.playlist-view .playlist-skeleton {
+  display: flex;
+  flex-direction: column;
+}
+
+.playlist-view .playlist-skeleton .playlist-info > .sk-line {
+  height: 14px;
+  border-radius: 6px;
+}
+
+.playlist-view .sk-art-big {
   width: 220px;
   aspect-ratio: 1;
   border-radius: var(--radius);
   flex-shrink: 0;
 }
 
+.playlist-view .sk-chips {
+  height: 30px;
+  width: 72%;
+  border-radius: 999px;
+}
+
+.playlist-view .sk-actions {
+  height: 38px;
+  width: 58%;
+  border-radius: var(--radius-sm);
+  margin-top: 4px;
+}
+
 @media (max-width: 640px) {
-  .playlist-header {
+  .playlist-view .playlist-header {
     flex-direction: column;
     gap: 18px;
   }
 
-  .playlist-art,
-  .sk-art-big {
+  .playlist-view .playlist-art,
+  .playlist-view .sk-art-big {
     width: 100%;
     max-width: 220px;
   }

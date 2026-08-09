@@ -1,16 +1,16 @@
-.track-header {
+.track-view .track-header {
   display: flex;
   gap: 28px;
   align-items: flex-start;
   margin-bottom: 20px;
 }
 
-.track-art {
+.track-view .track-art {
   width: 280px;
   flex-shrink: 0;
 }
 
-.track-info {
+.track-view .track-info {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -18,31 +18,119 @@
   gap: 12px;
 }
 
-.artist-link {
+.track-view .artist-link {
   font-size: 16px;
   font-weight: 600;
   color: var(--text2);
 }
 
-.track-desc {
-  margin: 0;
-  max-width: 640px;
-  white-space: pre-line;
-  overflow-wrap: break-word;
+.track-view .track-credits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 14px;
+  margin-top: -4px;
 }
 
-.track-actions {
+.track-view .track-credit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.track-view .track-desc-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: 640px;
+}
+
+.track-view .track-desc {
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: break-word;
+  width: 100%;
+}
+
+.track-view .track-desc.desc-clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  line-clamp: 6;
+  overflow: hidden;
+}
+
+.track-view .track-desc-toggle {
+  padding-left: 0;
+  padding-right: 0;
+  color: var(--accent-text);
+}
+
+.track-view .track-actions {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
 
-.track-wave {
+.track-view .track-wave {
   margin-bottom: 28px;
 }
 
-.track-snip {
+.track-view .track-wave-box {
+  position: relative;
+}
+
+.track-view .wave-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.track-view .wave-marker {
+  position: absolute;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  margin-left: -5px;
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 0.12s ease;
+}
+
+.track-view .wave-marker:hover {
+  transform: scale(1.5);
+  z-index: 2;
+}
+
+.track-view .wave-locked {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  background: var(--bg);
+  opacity: 0.55;
+  pointer-events: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.track-view .wave-snip-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.track-view .track-snip {
   margin-top: 8px;
   font-size: 13px;
   font-weight: 600;
@@ -51,53 +139,121 @@
   gap: 6px;
 }
 
-.track-section {
+.track-view .track-section {
   margin-bottom: 32px;
 }
 
-.track-list {
+.track-view .track-list {
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 
-.comment-list {
+.track-view .comment-list {
   margin-bottom: 4px;
 }
 
-.comment .body p {
+.track-view .comment-text {
   margin: 2px 0 0;
   white-space: pre-line;
 }
 
-.comment-head {
+.track-view .comment-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   font-size: 13px;
   font-weight: 600;
 }
 
-.sk-art-big {
+.track-view .comment-at {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--border2);
+  border-radius: 999px;
+  background: var(--surface2);
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.track-view .comment-at:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.track-view .comment-skeleton,
+.track-view .related-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.track-view .load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 0;
+  text-align: center;
+}
+
+.track-view .load-error p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.track-view .track-skeleton {
+  display: flex;
+  flex-direction: column;
+}
+
+.track-view .track-skeleton .track-info > .sk-line {
+  height: 14px;
+  border-radius: 6px;
+}
+
+.track-view .sk-art-big {
   width: 280px;
   aspect-ratio: 1;
   border-radius: var(--radius);
   flex-shrink: 0;
 }
 
-.sk-wave {
+.track-view .sk-chips {
+  height: 30px;
+  width: 78%;
+  border-radius: 999px;
+}
+
+.track-view .sk-actions {
+  height: 38px;
+  width: 62%;
+  border-radius: var(--radius-sm);
+  margin-top: 4px;
+}
+
+.track-view .sk-wave {
   height: 56px;
   border-radius: var(--radius-sm);
   margin-bottom: 28px;
 }
 
 @media (max-width: 640px) {
-  .track-header {
+  .track-view .track-header {
     flex-direction: column;
     gap: 18px;
   }
 
-  .track-art,
-  .sk-art-big {
+  .track-view .track-art,
+  .track-view .sk-art-big {
     width: 100%;
     max-width: 280px;
   }

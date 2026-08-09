@@ -1,7 +1,12 @@
+import type { AccountState } from '../core/account'
+import { accountStore } from '../core/account'
 import { debounce } from '../core/utils'
-import { navigate } from '../core/router'
+import { currentRoute, navigate } from '../core/router'
 import { getAPI } from '../api'
+import { avatarEl } from '../ui/artwork'
 import { h, svgIcon } from '../ui/el'
+import { appLogo } from '../ui/logo'
+import '../views/views.css'
 
 const NAV_ITEMS = [
   { path: '/', label: 'Inicio', icon: 'home' },
@@ -10,142 +15,197 @@ const NAV_ITEMS = [
   { path: '/queue', label: 'Cola', icon: 'queue' },
 ]
 
+const SUGGEST_MIN = 2
+
 let headerEl: HTMLElement | null = null
 
 function setActiveNav(): void {
   if (!headerEl) return
   const hash = window.location.hash.replace(/^#/, '') || '/'
-  const active = hash === '/' ? '/' : `/${hash.split('/')[1]}`
+  const active = hash === '/' ? '/' : `/${hash.split('/')[1].split('?')[0]}`
   headerEl.querySelectorAll<HTMLElement>('.nav-item').forEach((item) => {
     item.classList.toggle('active', item.dataset.path === active)
   })
 }
 
 export function renderHeader(): HTMLElement {
-  headerEl = h('header', { className: 'app-header' })
+  const header = h('header', { className: 'app-header' })
+  headerEl = header
 
-  const logo = h(
-    'a',
-    {
-      className: 'logo',
-      href: '#/',
-      title: 'Soundlite — inicio',
-      style: { display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 },
-    },
-  )
-  logo.innerHTML = `<svg width="26" height="26" viewBox="0 0 512 512" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5500"/><stop offset="1" stop-color="#ff2d78"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="none"/><g fill="none" stroke="url(#lg)" stroke-width="52" stroke-linecap="round"><path d="M96 296v64"/><path d="M156 232v128"/><path d="M216 176v184"/><path d="M276 264v96"/><path d="M336 208v152"/><path d="M396 256v104"/></g></svg><span style="font-weight:800;letter-spacing:-0.03em;font-size:18px">Soundlite</span>`
-  headerEl.appendChild(logo)
+  const logo = h('a', { className: 'logo', href: '#/', title: 'Soundlite — inicio' })
+  logo.innerHTML = appLogo(28)
+  logo.appendChild(h('span', { className: 'logo-name' }, 'Soundlite'))
+  header.appendChild(logo)
 
-  const nav = h('nav', { className: 'nav', style: { display: 'flex', gap: '2px' } })
+  const historyNav = h('div', { className: 'history-nav' })
+  const backBtn = h('button', { className: 'icon-btn', title: 'Atrás', 'aria-label': 'Atrás' })
+  backBtn.innerHTML = svgIcon('back', 18)
+  backBtn.addEventListener('click', () => window.history.back())
+  const forwardBtn = h('button', { className: 'icon-btn', title: 'Adelante', 'aria-label': 'Adelante' })
+  forwardBtn.innerHTML = svgIcon('forward', 18)
+  forwardBtn.addEventListener('click', () => window.history.forward())
+  historyNav.append(backBtn, forwardBtn)
+  header.appendChild(historyNav)
+
+  const nav = h('nav', { className: 'nav' })
   for (const item of NAV_ITEMS) {
-    const btn = h(
-      'a',
-      {
-        className: 'nav-item',
-        dataset: { path: item.path },
-        href: `#${item.path}`,
-        style: { display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', borderRadius: '999px', fontSize: '14px', fontWeight: 600, color: 'var(--text2)', transition: 'background .15s,color .15s' },
-      },
-    )
+    const btn = h('a', {
+      className: 'nav-item',
+      dataset: { path: item.path },
+      href: `#${item.path}`,
+      title: item.label,
+    })
     btn.innerHTML = svgIcon(item.icon, 16)
-    btn.appendChild(document.createTextNode(item.label))
+    btn.appendChild(h('span', { className: 'nav-label' }, item.label))
     nav.appendChild(btn)
   }
-  headerEl.appendChild(nav)
+  header.appendChild(nav)
 
+  const searchWrap = h('div', { className: 'header-search' })
   const searchBox = h('div', { className: 'search-input' })
   searchBox.innerHTML = svgIcon('search', 16)
   const input = h('input', {
     type: 'text',
     placeholder: 'Busca tracks, artistas, playlists…',
     autocomplete: 'off',
-    spellcheck: false,
+    spellcheck: 'false',
+    'aria-label': 'Buscar en SoundCloud',
   }) as HTMLInputElement
   searchBox.appendChild(input)
-  headerEl.appendChild(searchBox)
+  const suggestions = h('div', { className: 'suggest-box' })
+  searchWrap.append(searchBox, suggestions)
+  header.appendChild(searchWrap)
 
-  const suggestions = h('div', {
-    className: 'search-suggest',
-    style: { position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0, background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)', overflow: 'hidden', display: 'none', zIndex: 60 },
-  })
-  searchBox.style.position = 'relative'
-  searchBox.appendChild(suggestions)
+  let items: string[] = []
+  let activeIndex = -1
 
-
-  const closeSuggestions = () => {
-    suggestions.style.display = 'none'
-  }
-
-  const showSuggestions = (items: string[]) => {
+  const closeSuggestions = (): void => {
+    items = []
+    activeIndex = -1
     suggestions.replaceChildren()
-    if (items.length === 0) {
-      suggestions.style.display = 'none'
-      return
-    }
-    for (const item of items) {
-      const opt = h(
-        'button',
-        {
-          className: 'suggest-item',
-          style: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 14px', textAlign: 'left', fontSize: '14px', color: 'var(--text2)' },
-        },
-      )
-      opt.innerHTML = svgIcon('search', 15)
-      opt.appendChild(document.createTextNode(item))
-      opt.addEventListener('click', () => {
-        input.value = item
-        closeSuggestions()
-        goToSearch(item)
-      })
-      opt.addEventListener('mouseenter', () => opt.style.background = 'var(--surface2)')
-      opt.addEventListener('mouseleave', () => opt.style.background = '')
-      suggestions.appendChild(opt)
-    }
-    suggestions.style.display = 'block'
   }
 
-  const debouncedSuggest = debounce(async (q: string) => {
-    if (!q.trim()) {
-      closeSuggestions()
-      return
-    }
-    try {
-      const items = await getAPI().searchSuggestions(q)
-      if (input.value.trim() === q) showSuggestions(items)
-    } catch {
-      closeSuggestions()
-    }
-  }, 220)
+  const highlight = (): void => {
+    suggestions.querySelectorAll<HTMLElement>('.suggest-item').forEach((option, i) => {
+      option.classList.toggle('active', i === activeIndex)
+    })
+  }
 
-  const goToSearch = (q: string) => {
+  const goToSearch = (q: string): void => {
     closeSuggestions()
-    navigate(`/search?q=${encodeURIComponent(q)}`)
+    navigate('/search', { q })
     input.blur()
   }
 
+  const showSuggestions = (list: string[]): void => {
+    items = list
+    activeIndex = -1
+    suggestions.replaceChildren()
+    for (const item of list) {
+      const option = h('button', { className: 'suggest-item', type: 'button' })
+      option.innerHTML = svgIcon('search', 15)
+      option.appendChild(document.createTextNode(item))
+      option.addEventListener('mousedown', (event) => event.preventDefault())
+      option.addEventListener('click', () => {
+        input.value = item
+        goToSearch(item)
+      })
+      suggestions.appendChild(option)
+    }
+  }
+
+  const debouncedSuggest = debounce((q: string) => {
+    getAPI()
+      .searchSuggestions(q)
+      .then((list) => {
+        if (input.value.trim() === q) showSuggestions(list)
+      })
+      .catch(() => closeSuggestions())
+  }, 220)
+
   input.addEventListener('input', () => {
-    if (input.value.length >= 2) void debouncedSuggest(input.value.trim())
+    const q = input.value.trim()
+    if (q.length >= SUGGEST_MIN) debouncedSuggest(q)
     else closeSuggestions()
   })
 
   input.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowDown' && items.length > 0) {
+      event.preventDefault()
+      activeIndex = (activeIndex + 1) % items.length
+      highlight()
+      return
+    }
+    if (event.key === 'ArrowUp' && items.length > 0) {
+      event.preventDefault()
+      activeIndex = activeIndex <= 0 ? items.length - 1 : activeIndex - 1
+      highlight()
+      return
+    }
     if (event.key === 'Enter') {
-      const q = input.value.trim()
-      if (q) goToSearch(q)
+      const picked = activeIndex >= 0 ? items[activeIndex] : input.value.trim()
+      if (!picked) return
+      input.value = picked
+      goToSearch(picked)
+      return
     }
     if (event.key === 'Escape') closeSuggestions()
   })
 
-  document.addEventListener('click', (event) => {
-    if (!searchBox.contains(event.target as Node)) closeSuggestions()
+  input.addEventListener('blur', () => {
+    window.setTimeout(closeSuggestions, 150)
   })
+
+  document.addEventListener('click', (event) => {
+    if (!searchWrap.contains(event.target as Node)) closeSuggestions()
+  })
+
+  const accountLink = h('a', { className: 'header-account', href: '#/settings', title: 'Tu cuenta' })
+  header.appendChild(accountLink)
+
+  const renderAccount = (state: AccountState): void => {
+    accountLink.replaceChildren()
+    if (state.status !== 'ready' || !state.user) {
+      accountLink.setAttribute('href', '#/settings')
+      accountLink.title = state.status === 'unknown' ? 'Comprobando sesión…' : 'Inicia sesión'
+      const placeholder = h('span', { className: 'account-placeholder' })
+      placeholder.innerHTML = svgIcon('user', 16)
+      accountLink.appendChild(placeholder)
+      return
+    }
+    accountLink.setAttribute('href', '#/likes')
+    accountLink.title = `${state.user.username} — tus favoritos`
+    accountLink.appendChild(avatarEl(state.user.avatar_url, state.user.username, 30))
+  }
 
   const settingsBtn = h('a', { className: 'icon-btn', href: '#/settings', title: 'Ajustes' })
   settingsBtn.innerHTML = svgIcon('settings', 19)
-  headerEl.appendChild(settingsBtn)
+  header.appendChild(settingsBtn)
+
+  const syncSearchInput = (): void => {
+    const route = currentRoute()
+    if (route.view !== 'search') return
+    const q = route.params.q ?? ''
+    if (document.activeElement !== input && input.value !== q) input.value = q
+  }
+
+  let attached = false
+  let unsub: (() => void) | null = null
+  unsub = accountStore.subscribe((state) => {
+    if (attached && !header.isConnected) {
+      unsub?.()
+      return
+    }
+    attached = true
+    renderAccount(state)
+  })
 
   setActiveNav()
-  window.addEventListener('hashchange', setActiveNav)
+  syncSearchInput()
+  window.addEventListener('hashchange', () => {
+    setActiveNav()
+    syncSearchInput()
+  })
 
-  return headerEl
+  return header
 }

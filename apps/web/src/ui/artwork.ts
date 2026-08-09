@@ -30,7 +30,9 @@ export function artEl(url: string | null, label: string, opts: ArtworkOptions = 
 
 export function avatarEl(url: string | null, label: string, size = 40): HTMLElement {
   const el = document.createElement('div')
+  el.className = 'avatar'
   el.style.cssText = `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;position:relative;flex-shrink:0;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--text2);`
+  el.style.setProperty('--avatar-size', `${size}px`)
   el.textContent = initials(label)
   const src = artworkUrl(url, 't120x120')
   if (src) {

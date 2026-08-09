@@ -3,16 +3,45 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="Soundlite — un cliente de SoundCloud súper ligero, rápido y open source. Escucha, busca y descubre sin fricción." />
-    <meta name="theme-color" content="#0f0f10" />
+    <meta name="description" content="Soundlite — cliente libre y open source para SoundCloud. Proyecto independiente, sin afiliación con SoundCloud." />
+    <meta name="theme-color" content="#08080b" />
     <meta name="color-scheme" content="dark light" />
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('sl:settings')
+          var saved = raw ? JSON.parse(raw) : null
+          var theme = saved ? saved.theme : 'dark'
+          var dark = theme === 'system' ? matchMedia('(prefers-color-scheme: dark)').matches : theme !== 'light'
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+          var glass = saved && saved.glass
+          document.documentElement.dataset.glass =
+            glass === 'cristal' || glass === 'solido' ? glass : 'equilibrado'
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', dark ? '#08080b' : '#ececed')
+        } catch {}
+      })()
+    </script>
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Soundlite" />
-    <link rel="apple-touch-icon" href="/icon.svg" />
-    <title>Soundlite — SoundCloud ligero</title>
+    <meta name="application-name" content="Soundlite" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Soundlite" />
+    <meta property="og:locale" content="es_ES" />
+    <meta property="og:title" content="Soundlite — cliente libre para SoundCloud" />
+    <meta property="og:description" content="Cliente libre y open source para SoundCloud. Proyecto independiente, sin afiliación con SoundCloud. Escucha, busca y descubre sin fricción." />
+    <meta property="og:image" content="/icon-512.png" />
+    <meta property="og:image:alt" content="Logotipo de Soundlite" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Soundlite — cliente libre para SoundCloud" />
+    <meta name="twitter:description" content="Cliente libre y open source para SoundCloud. Proyecto independiente, sin afiliación con SoundCloud. Escucha, busca y descubre sin fricción." />
+    <meta name="twitter:image" content="/icon-512.png" />
+    <title>Soundlite — cliente libre para SoundCloud</title>
   </head>
   <body>
     <div id="app"></div>

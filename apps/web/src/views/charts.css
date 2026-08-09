@@ -1,13 +1,30 @@
-.charts-tabs {
-  margin-bottom: 10px;
+.charts-genres {
+  margin-bottom: 16px;
 }
 
-.charts-genres {
-  margin-bottom: 20px;
+.charts-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.charts-title {
+  margin: 0;
 }
 
 .charts-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.charts-retry {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  font-size: 14px;
 }

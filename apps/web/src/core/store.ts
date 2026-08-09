@@ -11,11 +11,22 @@ export function createStore<T extends object>(initial: T): Store<T> {
     get: () => state,
     set(patch) {
       state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) }
-      listeners.forEach((fn) => fn(state))
+      for (const fn of [...listeners]) {
+        if (!listeners.has(fn)) continue
+        try {
+          fn(state)
+        } catch (error) {
+          console.error('store listener', error)
+        }
+      }
     },
     subscribe(fn) {
       listeners.add(fn)
-      fn(state)
+      try {
+        fn(state)
+      } catch (error) {
+        console.error('store listener', error)
+      }
       return () => listeners.delete(fn)
     },
   }

@@ -1,8 +1,10 @@
+import type { User } from '@soundlite/api'
 import { getAPI } from '../api'
 import { link } from '../core/router'
 import { fmtTime } from '../core/utils'
 import { artEl } from '../ui/artwork'
 import { h, svgIcon } from '../ui/el'
+import { appLogo } from '../ui/logo'
 import { toast } from '../ui/toast'
 import { waveformEl } from '../ui/waveform'
 import { player } from '../player/player'
@@ -23,8 +25,8 @@ export function renderPlayerBar(): HTMLElement {
   const grid = h('div', { className: 'player-grid' })
 
   const nowWrap = h('div', { className: 'now' })
-  const nowArt = artEl(null, 'Soundlite', { size: 't120x120' })
-  nowArt.className = 'art'
+  const nowArt = h('div', { className: 'art' })
+  nowArt.innerHTML = appLogo(48)
   const nowMeta = h('div', { className: 'meta' })
   const nowTitle = h('a', { className: 'title truncate', style: { fontSize: '13px', fontWeight: 700 } })
   const nowArtist = h('a', { className: 'artist truncate link-hover', style: { fontSize: '12px', color: 'var(--text2)' } })
@@ -93,7 +95,7 @@ export function renderPlayerBar(): HTMLElement {
     const { current, playing } = state
     playBtn.innerHTML = svgIcon(playing ? 'pause' : 'play', 20)
     if (!current) {
-      nowArt.replaceChildren()
+      nowArt.innerHTML = appLogo(48)
       nowTitle.removeAttribute('href')
       nowTitle.textContent = 'Sin reproducción'
       nowArtist.removeAttribute('href')
@@ -103,11 +105,13 @@ export function renderPlayerBar(): HTMLElement {
       return
     }
     if (nowTitle.textContent !== current.title) {
+      const user = current.user as User | undefined
       nowArt.replaceChildren(...artEl(current.artwork_url, current.title, { size: 't120x120' }).children)
       nowTitle.href = link(`/track/${current.id}`)
       nowTitle.textContent = current.title
-      nowArtist.href = link(`/user/${current.user.id}`)
-      nowArtist.textContent = current.user.username
+      if (user) nowArtist.href = link(`/user/${user.id}`)
+      else nowArtist.removeAttribute('href')
+      nowArtist.textContent = user?.username ?? 'Artista desconocido'
       likeBtn.dataset.liked = String(state.isLiked)
       likeBtn.innerHTML = svgIcon(state.isLiked ? 'heartFill' : 'heart', 18)
       timeNow.textContent = '0:00'
@@ -134,9 +138,20 @@ export function renderPlayerBar(): HTMLElement {
     shuffleBtn.title = state.shuffle ? 'Aleatorio: activo' : 'Aleatorio'
     repeatBtn.classList.toggle('active', state.repeat !== 'off')
     repeatBtn.title = state.repeat === 'one' ? 'Repetir: una vez' : state.repeat === 'all' ? 'Repetir: todo' : 'Repetir'
-    repeatBtn.innerHTML = svgIcon(state.repeat === 'one' ? 'repeatOne' : 'repeat', 17)
-    volumeSlider.value = String(state.volume)
-    volumeBtn.innerHTML = svgIcon(state.volume === 0 || player.isMuted() ? 'mute' : 'volume', 18)
+    const repeatIcon = state.repeat === 'one' ? 'repeatOne' : 'repeat'
+    if (repeatBtn.dataset.icon !== repeatIcon) {
+      repeatBtn.dataset.icon = repeatIcon
+      repeatBtn.innerHTML = svgIcon(repeatIcon, 17)
+    }
+    if (document.activeElement !== volumeSlider) volumeSlider.value = String(state.volume)
+    const silent = state.muted || state.volume === 0
+    const volumeIcon = silent ? 'mute' : 'volume'
+    volumeBtn.title = silent ? 'Activar sonido' : 'Silenciar'
+    volumeBtn.classList.toggle('active', silent)
+    if (volumeBtn.dataset.icon !== volumeIcon) {
+      volumeBtn.dataset.icon = volumeIcon
+      volumeBtn.innerHTML = svgIcon(volumeIcon, 18)
+    }
   }
 
   player.store.subscribe(updateNow)
@@ -164,10 +179,7 @@ export function renderPlayerBar(): HTMLElement {
   })
 
   volumeSlider.addEventListener('input', () => player.setVolume(parseFloat(volumeSlider.value)))
-  volumeBtn.addEventListener('click', () => {
-    player.toggleMute()
-    updateControls(player.store.get())
-  })
+  volumeBtn.addEventListener('click', () => player.toggleMute())
 
   queueBtn.addEventListener('click', () => {
     window.location.hash = '#/queue'

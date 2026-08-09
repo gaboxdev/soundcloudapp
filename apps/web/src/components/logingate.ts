@@ -1,9 +1,8 @@
 import { desktopInvoke, isDesktop } from '../api/auth'
 import { accountStore, refreshAccount, type AccountState } from '../core/account'
 import { h, svgIcon } from '../ui/el'
+import { appLogo } from '../ui/logo'
 import { toast, toastErr } from '../ui/toast'
-
-const LOGO = `<svg width="54" height="54" viewBox="0 0 512 512" aria-hidden="true"><defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5500"/><stop offset="1" stop-color="#ff2d78"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="none"/><g fill="none" stroke="url(#lg2)" stroke-width="52" stroke-linecap="round"><path d="M96 296v64"/><path d="M156 232v128"/><path d="M216 176v184"/><path d="M276 264v96"/><path d="M336 208v152"/><path d="M396 256v104"/></g></svg>`
 
 export function renderLoginGate(): HTMLElement {
   const gate = h('div', { className: 'login-gate', hidden: true })
@@ -11,16 +10,24 @@ export function renderLoginGate(): HTMLElement {
   const card = h('div', { className: 'login-card card card-pad' })
   const logo = document.createElement('div')
   logo.className = 'login-logo'
-  logo.innerHTML = LOGO
+  logo.innerHTML = appLogo(54)
   card.appendChild(logo)
   card.appendChild(h('h1', { className: 'login-title' }, 'Soundlite'))
-  card.appendChild(h('p', { className: 'text-dim' }, 'Tu música de SoundCloud, ligera y rápida.'))
+  card.appendChild(h('p', { className: 'text-dim' }, 'Cliente libre para SoundCloud. Ligero y rápido.'))
 
   const statusText = h('p', { className: 'text-faint login-status' })
   card.appendChild(statusText)
 
   const actions = h('div', { className: 'login-actions' })
   card.appendChild(actions)
+
+  card.appendChild(
+    h(
+      'p',
+      { className: 'text-faint login-disclaimer' },
+      'Proyecto independiente de código abierto, sin afiliación ni respaldo de SoundCloud. SoundCloud es una marca de SoundCloud Global Limited & Co. KG; sus marcas, logos y contenido pertenecen a sus dueños.',
+    ),
+  )
 
   let poll: ReturnType<typeof setInterval> | null = null
 
@@ -39,8 +46,13 @@ export function renderLoginGate(): HTMLElement {
   }
 
   let previousStatus: AccountState['status'] = 'unknown'
+  let lastKey = ''
 
   function render(state: AccountState): void {
+    const key = `${state.status}|${state.user?.id ?? ''}`
+    if (key === lastKey) return
+    lastKey = key
+
     if (state.status === 'ready' && previousStatus !== 'ready') {
       if (state.user) toast(`¡Bienvenido, ${state.user.username}!`, 'ok')
       if (isDesktop()) {
@@ -72,6 +84,25 @@ export function renderLoginGate(): HTMLElement {
       )
       actions.appendChild(
         h(
+          'p',
+          { className: 'text-faint' },
+          'Tras entrar en la ventana, si la app no te reconoce pulsa «He iniciado sesión · Continuar» dentro de ella.',
+        ),
+      )
+      const reset = h(
+        'a',
+        { className: 'text-faint link-hover', href: '#' },
+        '¿No entra? Cierra la sesión anterior de SoundCloud y reintenta',
+      )
+      reset.addEventListener('click', (event) => {
+        event.preventDefault()
+        desktopInvoke('logout_window')
+          .then(() => toast('Reinicia la sesión y vuelve a pulsar «Iniciar sesión con SoundCloud»', 'ok'))
+          .catch(() => toastErr('No se pudo abrir la ventana de sesión'))
+      })
+      actions.appendChild(reset)
+      actions.appendChild(
+        h(
           'a',
           { className: 'text-faint link-hover', href: 'https://soundcloud.com', target: '_blank', rel: 'noopener' },
           '¿No tienes cuenta? Crea una en soundcloud.com',
@@ -95,8 +126,9 @@ export function renderLoginGate(): HTMLElement {
   }
 
   accountStore.subscribe((state) => {
-    gate.hidden = state.status === 'ready'
-    if (state.status === 'ready') {
+    const ready = state.status === 'ready'
+    if (gate.hidden !== ready) gate.hidden = ready
+    if (ready) {
       stopPoll()
     } else if (state.status === 'guest') {
       startPoll()

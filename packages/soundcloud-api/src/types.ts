@@ -5,6 +5,19 @@ export interface UserBadges {
   verified?: boolean
 }
 
+export interface UserVisual {
+  visual_url: string
+  urn?: string
+  entry_time?: number
+}
+
+export interface UserVisuals {
+  urn?: string
+  enabled?: boolean
+  visuals?: UserVisual[]
+  tracking?: unknown
+}
+
 export interface User {
   id: number
   kind: 'user'
@@ -30,6 +43,7 @@ export interface User {
   station_permalink?: string | null
   station_urn?: string | null
   description?: string | null
+  visuals?: UserVisuals | null
 }
 
 export type TrackPolicy = 'ALLOW' | 'SNIP' | 'BLOCK' | string
@@ -93,6 +107,7 @@ export interface Track {
   monetization_model: string | null
   policy: TrackPolicy
   access: { play?: boolean; preview?: boolean; item?: string } | null
+  track_authorization?: string
   secret_token?: string
   station_permalink?: string
   station_urn?: string
@@ -112,18 +127,12 @@ export interface TrackStub {
   policy?: string | null
 }
 
-export interface Playlist {
+export interface PlaylistSummary {
   id: number
   kind: 'playlist' | 'album'
   title: string
-  description: string | null
-  genre?: string | null
-  tag_list?: string
-  label_name?: string | null
-  license?: string
   duration?: number
   track_count?: number
-  tracks: (Track | TrackStub)[]
   user: User
   user_id?: number
   artwork_url: string | null
@@ -131,15 +140,32 @@ export interface Playlist {
   permalink?: string
   uri?: string
   urn?: string
+  is_album?: boolean
+  set_type?: string
+  managed_by_feeds?: boolean
   created_at?: string
   display_date?: string
+  published_at?: string
+  release_date?: string | null
   last_modified?: string
   likes_count?: number
-  comment_count?: number
-  playback_count?: number
+  reposts_count?: number
   public?: boolean
   sharing?: string
   secret_token?: string
+}
+
+export type SelectionItem = PlaylistSummary
+
+export interface Playlist extends PlaylistSummary {
+  description: string | null
+  genre?: string | null
+  tag_list?: string
+  label_name?: string | null
+  license?: string
+  tracks: (Track | TrackStub)[]
+  comment_count?: number
+  playback_count?: number
 }
 
 export interface Comment {
@@ -169,7 +195,7 @@ export interface Selection {
   urn: string
   query_urn?: string
   items: {
-    collection: Track[]
+    collection: SelectionItem[]
     next_href?: string | null
   }
 }
@@ -202,6 +228,11 @@ export function isTrack(item: unknown): item is Track {
 
 export function isPlaylist(item: unknown): item is Playlist {
   return (item as { kind?: string }).kind === 'playlist' || (item as { kind?: string }).kind === 'album'
+}
+
+export function isPlaylistSummary(item: unknown): item is PlaylistSummary {
+  const kind = (item as { kind?: string }).kind
+  return kind === 'playlist' || kind === 'album'
 }
 
 export function isUser(item: unknown): item is User {

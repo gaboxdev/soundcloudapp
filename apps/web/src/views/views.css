@@ -23,10 +23,190 @@
   flex-wrap: wrap;
 }
 
+.page-toolbar[hidden],
+.load-more[hidden],
+.btn[hidden],
+.icon-btn[hidden] {
+  display: none;
+}
+
 .track-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.view-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background-color: var(--veil-2);
+  background-image: var(--glass-sheet);
+  border: 1px solid var(--hairline-2);
+  box-shadow: var(--edge-light);
+  color: var(--text2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.view-notice[hidden] {
+  display: none;
+}
+
+.view-notice-icon {
+  display: inline-flex;
+  color: var(--accent-text);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ===== Cabecera ===== */
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  color: var(--text);
+}
+
+.logo-name {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.history-nav {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.nav {
+  display: flex;
+  gap: 2px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text2);
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.header-search {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  max-width: 420px;
+}
+
+.header-search .search-input {
+  width: 100%;
+  max-width: none;
+}
+
+.header-account {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.account-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--surface2);
+  color: var(--text3);
+}
+
+/* ===== Cola ===== */
+
+.queue-hint {
+  margin: 0;
+  font-size: 13px;
+}
+
+.queue-list .track-row {
+  border: 1px solid transparent;
+}
+
+.queue-list .track-row.queue-current {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.queue-list .track-row.dragging {
+  opacity: 0.45;
+}
+
+.queue-list .track-row.drop-before {
+  border-top-color: var(--accent);
+}
+
+.queue-list .track-row.drop-after {
+  border-bottom-color: var(--accent);
+}
+
+.queue-move svg {
+  transform: rotate(90deg);
+}
+
+.queue-move:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ===== Favoritos ===== */
+
+.track-row .played-at {
+  min-width: 74px;
+  text-align: right;
+}
+
+.account-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.account-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.account-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.account-stats {
+  flex-wrap: wrap;
+}
+
+.account-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .settings-card {
@@ -56,6 +236,29 @@
 .proxy-actions {
   display: flex;
   gap: 10px;
+}
+
+.proxy-status {
+  min-height: 18px;
+  font-size: 13px;
+  margin: 0;
+}
+
+.proxy-status.error {
+  color: var(--danger);
+}
+
+.btn.armed {
+  outline: 2px solid var(--danger);
+  outline-offset: 2px;
+}
+
+.account-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
 }
 
 .data-actions {
@@ -88,9 +291,11 @@
   height: 24px;
   padding: 0 8px;
   border-radius: 6px;
-  background: var(--surface2);
-  border: 1px solid var(--border2);
+  background-color: var(--veil-3);
+  background-image: var(--glass-sheet);
+  border: 1px solid var(--hairline-2);
   border-bottom-width: 2px;
+  box-shadow: var(--edge-light);
   font-family: inherit;
   font-size: 12px;
   font-weight: 700;
@@ -110,9 +315,6 @@
   justify-content: center;
   width: 42px;
   height: 42px;
-  border-radius: 10px;
-  background: var(--accent-grad);
-  color: #fff;
   flex-shrink: 0;
 }
 
@@ -129,4 +331,22 @@
 .about-note {
   font-size: 12px;
   margin: 8px 0 0;
+}
+
+@media (max-width: 900px) {
+  .history-nav {
+    display: none;
+  }
+
+  .logo-name {
+    display: none;
+  }
+
+  .nav-label {
+    display: none;
+  }
+
+  .nav-item {
+    padding: 8px 10px;
+  }
 }

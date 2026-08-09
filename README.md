@@ -1,6 +1,8 @@
 # Soundlite
 
-> SoundCloud, pero súper ligero. Rápido, open source y sin frameworks.
+> Cliente libre para SoundCloud. Rápido, open source y sin frameworks.
+>
+> *Proyecto independiente, sin afiliación con SoundCloud.*
 
 Soundlite es un **cliente nativo de SoundCloud** — no es un wrapper de la web. Habla directamente con la API de SoundCloud, renderiza su propia UI, y funciona como **PWA en el navegador** y como **app de escritorio (Tauri)** con el mismo código.
 
@@ -17,15 +19,15 @@ Un regalo para la comunidad de SoundCloud. MIT, para quien lo quiera, como se hi
 | 🎧 **Reproductor con waveform** | Scrubber visual interactivo, seek por rangos HTTP, preview de 30s para tracks Go+ (SNIP) |
 | 🔑 **Inicio de sesión con SoundCloud** | App de escritorio: entra con tu propia cuenta, ve tu perfil y tus likes sincronizados |
 | 🔎 **Búsqueda en vivo** | Sugerencias mientras escribes, resultados por tracks / playlists / usuarios, scroll infinito |
-| 📈 **Charts** | Tendencias y Top 50 por género (21 géneros), con ranks |
+| 📈 **Charts** | Tendencias globales con ranks + 28 géneros para explorar |
 | 🏠 **Feed de inicio** | Selecciones curadas de SoundCloud (mixed-selections) |
 | 🎵 **Tracks y playlists** | Descripción, comentarios con scroll infinito, tracks relacionados, descargas cuando el autor las permite |
 | 👤 **Perfiles** | Tracks, playlists y likes de cualquier usuario |
 | 📚 **Cola** | Repeat (off/todo/uno), shuffle, persistencia en localStorage |
-| ❤️ **Favoritos e historial** | Locales, sin necesidad de cuenta |
+| ❤️ **Favoritos e historial** | Tus favoritos sincronizados con tu cuenta de SoundCloud; historial local |
 | ⚡ **Atajos** | `Espacio` play/pausa · `←/→` ±5s · `N/P` siguiente/anterior · `M` silenciar. Soporta Media Session (teclas multimedia del sistema) |
 | 🌗 **Temas** | Oscuro / claro / sistema |
-| 📱 **PWA** | Instalable, service worker con caché de media, modo offline parcial |
+| 📱 **PWA** | Instalable, service worker con caché de arte y waveforms. La sesión es obligatoria y hoy solo existe en escritorio (ver abajo) |
 | 🖥️ **Escritorio** | Tauri 2: binario nativo de pocos MB, sin Electron |
 | 🎨 **Skeletons + blur-up** | La UI nunca se siente vacía: carga instantánea, imágenes lazy |
 
@@ -45,6 +47,8 @@ La API de SoundCloud bloquea CORS desde cualquier origen que no sea `soundcloud.
 - **Producción**: despliega el Cloudflare Worker en `proxy/worker` (~100 líneas) y pon su URL en **Ajustes → Proxy**. Funciona gratis en el plan free de Cloudflare.
 
 El audio y los waveforms se sirven directo desde los CDNs de SoundCloud (`Access-Control-Allow-Origin: *`), sin pasar por el proxy.
+
+> **Importante**: Soundlite exige iniciar sesión para usarse, y la sesión con SoundCloud solo puede establecerse desde la app de escritorio (cookies de terceros + CORS lo impiden en el navegador). Por eso, hoy **el build web muestra la pantalla de acceso y no permite entrar**: sirve para desarrollo y para desplegar el proxy, pero la app de verdad es la de escritorio. Levantar esa restricción (modo invitado) está en el roadmap.
 
 ### Cuenta e inicio de sesión (escritorio)
 
@@ -89,7 +93,8 @@ Detalles técnicos en [AGENTS.md](./AGENTS.md).
 
 ## 🗺️ Roadmap
 
-- [ ] Cuenta y sincronización de likes (requiere OAuth — investigación abierta)
+- [x] Cuenta y sincronización de likes (resuelto con el login nativo en la webview, sin OAuth)
+- [ ] Modo invitado en la versión web (hoy la sesión es obligatoria y solo existe en escritorio)
 - [ ] Estaciones de radio (artist station)
 - [ ] Más tamaños de arte (CDN) y opción de calidad
 - [ ] Versión móvil nativa
@@ -108,7 +113,11 @@ Normas: sin comentarios en el código, UI en español, TS estricto, clases kebab
 
 ## ⚖️ Legal
 
-Soundlite no está afiliado a SoundCloud ni a sus subsidiarias. SoundCloud y sus marcas, logos y contenido pertenecen a sus respectivos dueños. Soundlite solo accede a endpoints públicos que el propio sitio web de SoundCloud utiliza. Licencia [MIT](./LICENSE).
+**Soundlite es un proyecto independiente de código abierto, sin afiliación, patrocinio ni respaldo de SoundCloud.** No está desarrollado, avalado ni revisado por SoundCloud.
+
+«SoundCloud» es una marca registrada de SoundCloud Global Limited & Co. KG. Sus marcas, logotipos y contenido pertenecen a sus respectivos dueños y aquí se mencionan únicamente de forma descriptiva, para indicar con qué servicio funciona este cliente. Soundlite no usa el nombre ni el logotipo de SoundCloud como identidad propia: tiene su propio nombre y su propia marca.
+
+Soundlite solo accede a endpoints públicos que el propio sitio web de SoundCloud utiliza, y no aloja, redistribuye ni descarga contenido protegido salvo cuando el propio autor lo habilita en SoundCloud. Licencia [MIT](./LICENSE).
 
 ---
 

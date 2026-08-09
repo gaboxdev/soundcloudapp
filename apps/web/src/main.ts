@@ -1,3 +1,4 @@
+import './styles/acrylic.css'
 import './styles/design.css'
 import { bootstrapApp } from './app'
 import { initSettings } from './core/settings'
@@ -19,9 +20,7 @@ async function boot(): Promise<void> {
       const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
       const label = getCurrentWebviewWindow().label
       if (label && label !== 'main') return
-    } catch {
-      // sin etiqueta de ventana: contexto navegador
-    }
+    } catch {}
   }
   bootstrapApp()
   if (import.meta.env.PROD && 'serviceWorker' in navigator) {

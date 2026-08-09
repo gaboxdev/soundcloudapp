@@ -1,5 +1,5 @@
 import { register } from '../core/router'
-import { getSettings, updateSettings, type Theme } from '../core/settings'
+import { getSettings, updateSettings, type Glass, type Theme } from '../core/settings'
 import { saveHistory, saveLikes } from '../core/library'
 import { player } from '../player/player'
 import { resetAPI } from '../api'
@@ -7,8 +7,12 @@ import { desktopInvoke, isDesktop } from '../api/auth'
 import { accountStore, refreshAccount, type AccountState } from '../core/account'
 import { avatarEl } from '../ui/artwork'
 import { h, iconEl, svgIcon } from '../ui/el'
+import { appLogo } from '../ui/logo'
 import { toast, toastErr } from '../ui/toast'
 import './views.css'
+
+const APP_VERSION = __APP_VERSION__
+const WIPE_TIMEOUT = 6000
 
 function settingsCard(title: string, children: HTMLElement[]): HTMLElement {
   const card = h('div', { className: 'card card-pad settings-card' })
@@ -20,6 +24,7 @@ function settingsCard(title: string, children: HTMLElement[]): HTMLElement {
 register('settings', (_route, container) => {
   document.title = 'Ajustes — Soundlite'
 
+  const desktop = isDesktop()
   const page = h('div', { className: 'view-page' })
   page.appendChild(h('h1', { className: 'h-display' }, 'Ajustes'))
   page.appendChild(h('p', { className: 'text-dim' }, 'Personaliza tu experiencia en Soundlite.'))
@@ -35,11 +40,18 @@ register('settings', (_route, container) => {
     h('button', { className: 'chip', dataset: { theme: value } }, label),
   )
   themeChips.forEach((chip) => themeRow.appendChild(chip))
+  const themeHint = h('p', { className: 'text-faint' })
+  const systemQuery = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)') : null
   const refreshTheme = (): void => {
     const current = getSettings().theme
     themeChips.forEach((chip) => {
       chip.classList.toggle('active', chip.dataset.theme === current)
     })
+    const resolved = document.documentElement.dataset.theme === 'light' ? 'claro' : 'oscuro'
+    themeHint.textContent =
+      current === 'system'
+        ? `Siguiendo el tema del sistema · ahora ${resolved}`
+        : `Tema fijado en ${current === 'light' ? 'claro' : 'oscuro'}`
   }
   refreshTheme()
   themeChips.forEach((chip) => {
@@ -48,30 +60,89 @@ register('settings', (_route, container) => {
       refreshTheme()
     })
   })
-  page.appendChild(settingsCard('Tema', [themeRow]))
+  const onSystemTheme = (): void => {
+    if (!container.isConnected) {
+      systemQuery?.removeEventListener('change', onSystemTheme)
+      return
+    }
+    refreshTheme()
+  }
+  systemQuery?.addEventListener('change', onSystemTheme)
+  page.appendChild(settingsCard('Tema', [themeRow, themeHint]))
+
+  const glassRow = h('div', { className: 'chip-row' })
+  const glassValues: { value: Glass; label: string; hint: string }[] = [
+    { value: 'cristal', label: 'Cristal', hint: 'Máxima transparencia: la carátula se cuela por toda la interfaz.' },
+    { value: 'equilibrado', label: 'Equilibrado', hint: 'El color de la carátula tiñe el cristal sin comerse el texto.' },
+    { value: 'solido', label: 'Sólido', hint: 'Cristal apenas insinuado, contraste máximo.' },
+  ]
+  const glassChips = glassValues.map(({ value, label }) =>
+    h('button', { className: 'chip', dataset: { glass: value } }, label),
+  )
+  glassChips.forEach((chip) => glassRow.appendChild(chip))
+  const glassHint = h('p', { className: 'text-faint' })
+  const refreshGlass = (): void => {
+    const current = getSettings().glass
+    glassChips.forEach((chip) => chip.classList.toggle('active', chip.dataset.glass === current))
+    glassHint.textContent = glassValues.find((option) => option.value === current)?.hint ?? ''
+  }
+  refreshGlass()
+  glassChips.forEach((chip) => {
+    chip.addEventListener('click', () => {
+      updateSettings({ glass: chip.dataset.glass as Glass })
+      refreshGlass()
+    })
+  })
+  const reducedTransparency =
+    typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-transparency: reduce)').matches
+  const glassCard = settingsCard('Cristal', [glassRow, glassHint])
+  if (reducedTransparency) {
+    glassCard.appendChild(
+      h(
+        'p',
+        { className: 'text-faint' },
+        'Tu sistema pide reducir transparencias, así que Soundlite está usando superficies opacas y este ajuste no se aplica.',
+      ),
+    )
+  }
+  page.appendChild(glassCard)
 
   const volumeRow = h('div', { className: 'vol-row' })
+  const muteBtn = h('button', { className: 'icon-btn', title: 'Silenciar', 'aria-label': 'Silenciar' })
   const volumeSlider = h('input', {
     type: 'range',
     min: '0',
     max: '1',
     step: '0.01',
+    'aria-label': 'Volumen',
   }) as HTMLInputElement
   const volumeLabel = h('span', { className: 'text-faint vol-label' })
+  volumeRow.appendChild(muteBtn)
   volumeRow.appendChild(volumeSlider)
   volumeRow.appendChild(volumeLabel)
-  const syncVolume = (value: number): void => {
-    volumeSlider.value = String(value)
-    volumeLabel.textContent = `${Math.round(value * 100)}%`
+  muteBtn.addEventListener('click', () => player.toggleMute())
+
+  let lastMuted: boolean | null = null
+  const syncVolume = (volume: number, muted: boolean): void => {
+    if (parseFloat(volumeSlider.value) !== volume) volumeSlider.value = String(volume)
+    const label = muted ? 'Silenciado' : `${Math.round(volume * 100)}%`
+    if (volumeLabel.textContent !== label) volumeLabel.textContent = label
+    if (muted !== lastMuted) {
+      lastMuted = muted
+      muteBtn.innerHTML = svgIcon(muted ? 'mute' : 'volume', 18)
+      muteBtn.classList.toggle('active', muted)
+      muteBtn.title = muted ? 'Quitar silencio' : 'Silenciar'
+    }
   }
-  syncVolume(player.store.get().volume)
+  const initial = player.store.get()
+  syncVolume(initial.volume, initial.muted)
   volumeSlider.addEventListener('input', () => player.setVolume(parseFloat(volumeSlider.value)))
   page.appendChild(settingsCard('Volumen', [volumeRow]))
 
   const accountCard = settingsCard('Cuenta', [])
   page.appendChild(accountCard)
 
-  if (!isDesktop()) {
+  if (!desktop) {
     accountCard.appendChild(
       h(
         'p',
@@ -102,10 +173,10 @@ register('settings', (_route, container) => {
         return
       }
       const user = state.user
-      const row = h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } })
+      const row = h('div', { className: 'account-row' })
       row.appendChild(avatarEl(user.avatar_url, user.username, 40))
-      const info = h('div', { style: { display: 'flex', flexDirection: 'column' } })
-      info.appendChild(h('strong', {}, `${user.username}${user.verified ? ' ✓' : ''}`))
+      const info = h('div', { className: 'account-info' })
+      info.appendChild(h('strong', { className: 'truncate' }, `${user.username}${user.verified ? ' ✓' : ''}`))
       info.appendChild(h('span', { className: 'text-faint' }, `${user.followers_count ?? 0} seguidores`))
       row.appendChild(info)
       statusRow.appendChild(row)
@@ -116,57 +187,134 @@ register('settings', (_route, container) => {
         setTimeout(() => void refreshAccount(), 2500)
       })
       actions.appendChild(logoutBtn)
-      const likesBtn = h('a', { className: 'btn btn-ghost btn-sm', href: '#/likes' }, 'Ver tus likes')
-      actions.appendChild(likesBtn)
+      actions.appendChild(h('a', { className: 'btn btn-ghost btn-sm', href: '#/likes' }, 'Ver tus likes'))
     }
 
-    const unsub = accountStore.subscribe((state) => {
-      if (!container.isConnected) {
-        unsub()
+    let accountAttached = false
+    let unsubAccount: (() => void) | null = null
+    unsubAccount = accountStore.subscribe((state) => {
+      if (accountAttached && !container.isConnected) {
+        unsubAccount?.()
         return
       }
+      accountAttached = true
       renderAccount(state)
     })
     void refreshAccount()
   }
 
-  const proxyField = h('div', { className: 'field' })
-  proxyField.appendChild(h('label', { className: 'field-label' }, 'URL base del proxy'))
-  const proxyInput = h('input', {
-    className: 'input',
-    type: 'url',
-    placeholder: 'https://proxy.ejemplo.com',
-    value: getSettings().apiBase,
-  }) as HTMLInputElement
-  const proxyHint = h('p', { className: 'text-faint' }, 'Si alojas tu propio proxy, indica aquí su URL base.')
-  proxyField.appendChild(proxyInput)
-  proxyField.appendChild(proxyHint)
-  const proxyActions = h('div', { className: 'proxy-actions' })
-  const saveProxyBtn = h('button', { className: 'btn btn-ghost btn-sm' }, 'Guardar y recargar')
-  saveProxyBtn.addEventListener('click', () => {
-    updateSettings({ apiBase: proxyInput.value.trim() })
-    resetAPI()
-    location.reload()
-  })
-  proxyActions.appendChild(saveProxyBtn)
-  page.appendChild(settingsCard('Proxy (avanzado)', [proxyField, proxyActions]))
+  if (!desktop) {
+    const proxyField = h('div', { className: 'field' })
+    proxyField.appendChild(h('label', { className: 'field-label' }, 'URL base del proxy'))
+    const proxyInput = h('input', {
+      className: 'input',
+      type: 'url',
+      placeholder: 'https://proxy.ejemplo.com',
+      value: getSettings().apiBase,
+    }) as HTMLInputElement
+    const proxyHint = h('p', { className: 'text-faint' }, 'Si alojas tu propio proxy, indica aquí su URL base. Déjalo vacío para usar el proxy por defecto.')
+    const proxyStatus = h('p', { className: 'proxy-status text-faint' })
+    proxyField.appendChild(proxyInput)
+    proxyField.appendChild(proxyHint)
+    proxyField.appendChild(proxyStatus)
+
+    const setProxyStatus = (message: string, error: boolean): void => {
+      proxyStatus.textContent = message
+      proxyStatus.classList.toggle('error', error)
+    }
+
+    const proxyActions = h('div', { className: 'proxy-actions' })
+    const saveProxyBtn = h('button', { className: 'btn btn-ghost btn-sm' }, 'Probar y guardar')
+    proxyActions.appendChild(saveProxyBtn)
+
+    const saveProxy = async (): Promise<void> => {
+      const raw = proxyInput.value.trim()
+      if (!raw) {
+        updateSettings({ apiBase: '' })
+        resetAPI()
+        location.reload()
+        return
+      }
+      let base: string
+      try {
+        base = new URL(raw).toString().replace(/\/+$/, '')
+      } catch {
+        setProxyStatus('Esa URL no es válida. Usa un formato como https://proxy.ejemplo.com', true)
+        return
+      }
+      saveProxyBtn.disabled = true
+      setProxyStatus(`Comprobando ${base}/sl-client-id…`, false)
+      try {
+        const response = await fetch(`${base}/sl-client-id`)
+        if (!response.ok) throw new Error(String(response.status))
+        if (updateSettings({ apiBase: base }).apiBase !== base) throw new Error('rechazada')
+        resetAPI()
+        location.reload()
+      } catch {
+        saveProxyBtn.disabled = false
+        setProxyStatus(`No se pudo contactar con ${base}/sl-client-id. Revisa la URL y que el proxy esté activo.`, true)
+      }
+    }
+
+    saveProxyBtn.addEventListener('click', () => void saveProxy())
+    page.appendChild(settingsCard('Proxy (avanzado)', [proxyField, proxyActions]))
+  }
 
   const dataActions = h('div', { className: 'data-actions' })
-  const clearDataBtn = h('button', { className: 'btn btn-danger btn-sm' }, 'Borrar favoritos e historial')
+  const clearDataBtn = h('button', { className: 'btn btn-danger btn-sm' }, 'Borrar historial y caché local')
   clearDataBtn.addEventListener('click', () => {
-    player.store.set({ likes: [], history: [], isLiked: false })
-    saveLikes([])
+    player.store.set({ history: [] })
     saveHistory([])
-    toast('Favoritos e historial borrados', 'ok')
+    saveLikes([])
+    if (desktop) {
+      void player.syncAccountLikes(true)
+      toast('Historial y caché local borrados', 'ok')
+      return
+    }
+    player.store.set({ likes: [], isLiked: false })
+    toast('Historial y favoritos locales borrados', 'ok')
   })
+
+  let wipeArmed = false
+  let wipeTimer: ReturnType<typeof setTimeout> | null = null
   const wipeBtn = h('button', { className: 'btn btn-danger btn-sm' }, 'Borrar toda la app')
+  const disarmWipe = (): void => {
+    wipeArmed = false
+    wipeBtn.textContent = 'Borrar toda la app'
+    wipeBtn.classList.remove('armed')
+    if (wipeTimer) {
+      clearTimeout(wipeTimer)
+      wipeTimer = null
+    }
+  }
   wipeBtn.addEventListener('click', () => {
+    if (!wipeArmed) {
+      wipeArmed = true
+      wipeBtn.textContent = '¿Seguro? Pulsa otra vez para borrarlo todo'
+      wipeBtn.classList.add('armed')
+      wipeTimer = setTimeout(disarmWipe, WIPE_TIMEOUT)
+      return
+    }
+    disarmWipe()
     localStorage.clear()
     location.reload()
   })
+
   dataActions.appendChild(clearDataBtn)
   dataActions.appendChild(wipeBtn)
-  page.appendChild(settingsCard('Datos', [dataActions]))
+  const dataHint = h(
+    'p',
+    { className: 'text-faint' },
+    desktop
+      ? 'Tus favoritos viven en tu cuenta de SoundCloud: al borrar la caché se vuelven a sincronizar. Para quitarlos de verdad, usa el corazón de cada track.'
+      : 'Se borra el historial y los favoritos guardados en este navegador.',
+  )
+  const wipeHint = h(
+    'p',
+    { className: 'text-faint' },
+    '«Borrar toda la app» elimina ajustes, cola, historial y caché de este dispositivo, y recarga Soundlite.',
+  )
+  page.appendChild(settingsCard('Datos', [dataActions, dataHint, wipeHint]))
 
   const shortcuts: [string, string][] = [
     ['Espacio', 'Reproducir / pausar'],
@@ -186,9 +334,9 @@ register('settings', (_route, container) => {
 
   const aboutHead = h('div', { className: 'about-head' })
   const aboutLogo = h('span', { className: 'about-logo' })
-  aboutLogo.innerHTML = svgIcon('waves', 24)
+  aboutLogo.innerHTML = appLogo(42)
   aboutHead.appendChild(aboutLogo)
-  aboutHead.appendChild(h('span', { className: 'about-title' }, 'Soundlite v0.1.0'))
+  aboutHead.appendChild(h('span', { className: 'about-title' }, `Soundlite v${APP_VERSION}`))
   const aboutDesc = h(
     'p',
     { className: 'text-dim' },
@@ -204,16 +352,21 @@ register('settings', (_route, container) => {
   const disclaimer = h(
     'p',
     { className: 'text-faint about-note' },
-    'Soundlite no está afiliado a SoundCloud. SoundCloud y sus marcas pertenecen a sus respectivos dueños.',
+    'Proyecto independiente de código abierto, sin afiliación ni respaldo de SoundCloud. «SoundCloud» es una marca registrada de SoundCloud Global Limited & Co. KG; sus marcas, logos y contenido pertenecen a sus dueños.',
   )
   const gift = h('p', { className: 'text-faint about-note' }, 'Regalo para la comunidad de SoundCloud')
   page.appendChild(settingsCard('Acerca de', [aboutHead, aboutDesc, aboutActions, disclaimer, gift]))
 
-  const unsub = player.store.subscribe((state) => {
-    if (!container.isConnected) {
-      unsub()
+  let attached = false
+  let unsub: (() => void) | null = null
+  unsub = player.store.subscribe((state) => {
+    if (attached && !container.isConnected) {
+      systemQuery?.removeEventListener('change', onSystemTheme)
+      if (wipeTimer) clearTimeout(wipeTimer)
+      unsub?.()
       return
     }
-    syncVolume(state.volume)
+    attached = true
+    syncVolume(state.volume, state.muted)
   })
 })

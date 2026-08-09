@@ -3,6 +3,7 @@ import { renderHeader } from './components/header'
 import { renderPlayerBar } from './components/playerbar'
 import { renderLoginGate } from './components/logingate'
 import { refreshAccount, watchSessionWindow } from './core/account'
+import { mountAmbient } from './ui/ambient'
 import { player } from './player/player'
 
 let initialized = false
@@ -13,6 +14,8 @@ export function bootstrapApp(): void {
 
   const app = document.getElementById('app')
   if (!app) return
+
+  mountAmbient()
 
   app.appendChild(renderHeader())
 
@@ -35,19 +38,26 @@ export function bootstrapApp(): void {
   bindGlobalKeys()
 }
 
+const INTERACTIVE = 'input, textarea, select, button, a[href], [role="button"], [contenteditable="true"]'
+
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+  if (target instanceof HTMLElement && target.isContentEditable) return true
+  return Boolean(target.closest(INTERACTIVE))
+}
+
 function bindGlobalKeys(): void {
   window.addEventListener('keydown', (event) => {
-    const target = event.target as HTMLElement
-    const typing = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
-    if (typing) return
+    if (event.metaKey || event.ctrlKey || event.altKey) return
+    if (isInteractiveTarget(event.target)) return
 
     if (event.code === 'Space') {
       event.preventDefault()
       player.toggle()
-    } else if (event.key === 'ArrowLeft' && !event.metaKey) {
+    } else if (event.key === 'ArrowLeft') {
       event.preventDefault()
       player.seekTo(player.store.get().progress - 5000)
-    } else if (event.key === 'ArrowRight' && !event.metaKey) {
+    } else if (event.key === 'ArrowRight') {
       event.preventDefault()
       player.seekTo(player.store.get().progress + 5000)
     } else if (event.key === 'n' || event.key === 'N') {

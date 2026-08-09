@@ -1,5 +1,7 @@
 const W = 1200
 const H = 80
+const PLACEHOLDER_BARS = 120
+const PLACEHOLDER_VALUE = 0.1
 
 export interface WaveformOptions {
   interactive?: boolean
@@ -22,11 +24,15 @@ function buildPath(samples: number[]): string {
   const parts: string[] = []
   for (let i = 0; i < samples.length; i++) {
     const x = i * step
-    const value = Math.max(0.04, Math.min(1, samples[i] / 255))
+    const value = Math.max(0.04, Math.min(1, samples[i]))
     const half = Math.max(1, (value * H) / 2)
     parts.push(`M${x.toFixed(1)} ${(H / 2 - half).toFixed(1)}L${x.toFixed(1)} ${(H / 2 + half).toFixed(1)}`)
   }
   return parts.join('')
+}
+
+function placeholderPath(): string {
+  return buildPath(new Array<number>(PLACEHOLDER_BARS).fill(PLACEHOLDER_VALUE))
 }
 
 function fmt(ms: number): string {
@@ -36,7 +42,7 @@ function fmt(ms: number): string {
 
 export function waveformEl(options: WaveformOptions = {}): WaveformController {
   const wrap = document.createElement('div')
-  wrap.className = 'waveform loading'
+  wrap.className = 'waveform loading skeleton'
 
   const ns = 'http://www.w3.org/2000/svg'
   const svg = document.createElementNS(ns, 'svg')
@@ -72,53 +78,102 @@ export function waveformEl(options: WaveformOptions = {}): WaveformController {
     wrap.appendChild(hoverTime)
   }
 
-  function ratioFromEvent(event: MouseEvent | PointerEvent): number {
+  let lastPercent = -1
+
+  function applyProgress(ratio: number): void {
+    const clamped = Math.min(1, Math.max(0, ratio))
+    const percent = Math.round(clamped * 1000) / 10
+    if (percent === lastPercent) return
+    lastPercent = percent
+    fg.style.setProperty('--wave-p', `${percent}%`)
+  }
+
+  function setLoadingState(loading: boolean): void {
+    wrap.classList.toggle('loading', loading)
+    wrap.classList.toggle('skeleton', loading)
+  }
+
+  function ratioFromEvent(event: PointerEvent): number {
     const rect = wrap.getBoundingClientRect()
     if (rect.width === 0) return 0
     return Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
   }
 
+  applyProgress(0)
+
   if (options.interactive) {
-    const move = (event: MouseEvent | PointerEvent) => {
-      const rect = wrap.getBoundingClientRect()
-      if (rect.width === 0) return
-      const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
-      if (options.showHover) {
-        hoverLine.style.left = `${ratio * 100}%`
-        const duration = options.getDuration?.() ?? 0
-        if (duration > 0) {
-          hoverTime.textContent = fmt(ratio * duration)
-          hoverTime.style.left = `${Math.min(96, Math.max(4, ratio * 100))}%`
-        }
+    let scrubbing = false
+
+    const showHoverAt = (ratio: number): void => {
+      if (!options.showHover) return
+      hoverLine.style.left = `${ratio * 100}%`
+      const duration = options.getDuration?.() ?? 0
+      if (duration > 0) {
+        hoverTime.textContent = fmt(ratio * duration)
+        hoverTime.style.left = `${Math.min(96, Math.max(4, ratio * 100))}%`
       }
     }
-    wrap.addEventListener('pointermove', move)
-    wrap.addEventListener('pointerleave', () => {
-      if (options.showHover) {
-        hoverLine.style.left = '-10%'
-        hoverTime.style.left = '-10%'
-      }
-    })
-    wrap.addEventListener('pointerdown', (event) => {
-      if (wrap.classList.contains('loading')) return
+
+    const hideHover = (): void => {
+      if (!options.showHover) return
+      hoverLine.style.left = '-10%'
+      hoverTime.style.left = '-10%'
+    }
+
+    const seekFromEvent = (event: PointerEvent): void => {
       const ratio = ratioFromEvent(event)
-      if (options.onSeek) options.onSeek(ratio)
+      applyProgress(ratio)
+      options.onSeek?.(ratio)
+    }
+
+    const endScrub = (event: PointerEvent): void => {
+      if (!scrubbing) return
+      scrubbing = false
+      wrap.classList.remove('scrubbing')
+      if (wrap.hasPointerCapture(event.pointerId)) wrap.releasePointerCapture(event.pointerId)
+      seekFromEvent(event)
+    }
+
+    wrap.addEventListener('pointermove', (event) => {
+      const rect = wrap.getBoundingClientRect()
+      if (rect.width === 0) return
+      showHoverAt(Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)))
+      if (scrubbing) seekFromEvent(event)
     })
+
+    wrap.addEventListener('pointerleave', () => {
+      if (!scrubbing) hideHover()
+    })
+
+    wrap.addEventListener('pointerdown', (event) => {
+      if (event.button > 0) return
+      if (wrap.classList.contains('loading')) return
+      event.preventDefault()
+      scrubbing = true
+      wrap.classList.add('scrubbing')
+      wrap.setPointerCapture(event.pointerId)
+      seekFromEvent(event)
+    })
+
+    wrap.addEventListener('pointerup', endScrub)
+    wrap.addEventListener('pointercancel', endScrub)
   }
 
   return {
     el: wrap,
     setSamples(samples) {
-      wrap.classList.toggle('loading', !samples || samples.length === 0)
-      const d = samples ? buildPath(samples) : ''
+      const hasData = samples !== null && samples.length > 0
+      const d = hasData ? buildPath(samples) : placeholderPath()
       bgPath.setAttribute('d', d)
       fgPath.setAttribute('d', d)
+      wrap.classList.toggle('wave-empty', !hasData)
+      setLoadingState(false)
     },
     setProgress(ratio) {
-      fg.style.transform = `scaleX(${Math.min(1, Math.max(0, ratio))})`
+      applyProgress(ratio)
     },
     setLoading(loading) {
-      wrap.classList.toggle('loading', loading)
+      setLoadingState(loading)
     },
     destroy() {
       wrap.replaceChildren()

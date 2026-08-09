@@ -1,8 +1,7 @@
-import type { Playlist, Searchable, Track, User } from '@soundlite/api'
-import { isPlaylist, isTrack, isUser } from '@soundlite/api'
+import type { Playlist, SearchResponse, Track, User } from '@soundlite/api'
 import { getAPI } from '../api'
 import { skeletonRows, trackRow } from '../components/trackrow'
-import { link, register } from '../core/router'
+import { link, navigate, register, searchLink } from '../core/router'
 import { debounce, fmtCount } from '../core/utils'
 import { player } from '../player/player'
 import { artEl, avatarEl } from '../ui/artwork'
@@ -10,25 +9,42 @@ import { h, iconEl, svgIcon } from '../ui/el'
 import { toastErr } from '../ui/toast'
 import './search.css'
 
-type SearchTab = 'tracks' | 'playlists' | 'users'
+type SearchTab = 'tracks' | 'playlists' | 'albums' | 'users'
 
 const TAB_DEFS: { id: SearchTab; label: string }[] = [
   { id: 'tracks', label: 'Tracks' },
   { id: 'playlists', label: 'Playlists' },
+  { id: 'albums', label: 'Álbumes' },
   { id: 'users', label: 'Usuarios' },
 ]
 
-register('search', (route, container) => {
-  document.title = 'Búsqueda — Soundlite'
-  const api = getAPI()
+const PAGE_SIZE = 20
+const SUGGEST_LIST_ID = 'search-suggest-list'
 
-  let q = route.params.q ?? ''
-  let tab: SearchTab = 'tracks'
+function parseTab(value: string | undefined): SearchTab {
+  const found = TAB_DEFS.find((def) => def.id === value)
+  return found ? found.id : 'tracks'
+}
+
+function isAlbum(pl: Playlist): boolean {
+  return pl.is_album === true || pl.set_type === 'album'
+}
+
+register('search', (route, container) => {
+  const api = getAPI()
+  const query = (route.params.q ?? '').trim()
+  const tab = parseTab(route.params.tab)
+
+  document.title = query ? `«${query}» — Soundlite` : 'Búsqueda — Soundlite'
+
   let tracks: Track[] = []
-  let offset = 0
+  let next: string | null = null
+  let started = false
   let loading = false
   let done = false
-  let seq = 0
+  let rendered = 0
+  let suggestions: string[] = []
+  let activeIndex = -1
 
   container.innerHTML = ''
   const view = h('div', { className: 'search-view' })
@@ -37,53 +53,52 @@ register('search', (route, container) => {
     className: 'input search-field',
     type: 'search',
     placeholder: 'Busca música, artistas y playlists…',
-    value: q,
-    autofocus: q ? true : undefined,
-    oninput: (event) => {
-      q = (event.target as HTMLInputElement).value
-      requestSuggestions(q)
-    },
-    onkeydown: (event) => {
-      if (event.key === 'Enter') {
-        hideSuggestions()
-        startSearch()
-      } else if (event.key === 'Escape') {
-        hideSuggestions()
-      }
-    },
+    value: query,
+    autocomplete: 'off',
+    spellcheck: 'false',
+    role: 'combobox',
+    'aria-expanded': 'false',
+    'aria-controls': SUGGEST_LIST_ID,
+    'aria-autocomplete': 'list',
+    'aria-label': 'Buscar en SoundCloud',
   })
+  input.addEventListener('input', () => requestSuggestions(input.value))
+  input.addEventListener('keydown', (event) => onKeyDown(event))
   input.addEventListener('blur', () => {
-    setTimeout(hideSuggestions, 150)
+    window.setTimeout(hideSuggestions, 150)
   })
+
+  const searchIcon = iconEl('search', 20)
+  searchIcon.className = 'search-icon'
 
   const searchBox = h('div', { className: 'search-box' })
-  searchBox.appendChild(iconEl('search', 20))
-  searchBox.appendChild(input)
+  searchBox.append(searchIcon, input)
 
-  const suggestBox = h('div', { className: 'suggest-box' })
+  const suggestBox = h('div', {
+    className: 'suggest-box',
+    id: SUGGEST_LIST_ID,
+    role: 'listbox',
+    'aria-label': 'Sugerencias de búsqueda',
+  })
   const inputWrap = h('div', { className: 'search-input-wrap' })
   inputWrap.append(searchBox, suggestBox)
 
-  const tabs = h('div', { className: 'chip-row search-tabs' })
-  const tabButtons = new Map<SearchTab, HTMLElement>()
+  const tabs = h('div', { className: 'chip-row search-tabs', role: 'tablist' })
   for (const def of TAB_DEFS) {
-    const chip = h(
-      'button',
-      {
-        className: 'chip',
-        onclick: () => {
-          if (tab === def.id) return
-          tab = def.id
-          for (const [key, btn] of tabButtons) btn.classList.toggle('active', key === def.id)
-          startSearch()
+    const current = def.id === tab
+    tabs.appendChild(
+      h(
+        'a',
+        {
+          className: current ? 'chip active' : 'chip',
+          href: tabHref(query, def.id),
+          role: 'tab',
+          'aria-selected': current ? 'true' : 'false',
         },
-      },
-      def.label,
+        def.label,
+      ),
     )
-    tabButtons.set(def.id, chip)
-    tabs.appendChild(chip)
   }
-  tabButtons.get('tracks')?.classList.add('active')
 
   const results = h('div', { className: 'search-results' })
   const sentinel = h('div', { className: 'load-more' })
@@ -93,140 +108,218 @@ register('search', (route, container) => {
 
   const observer = new IntersectionObserver(
     (entries) => {
+      if (!container.isConnected) {
+        observer.disconnect()
+        return
+      }
       for (const entry of entries) {
         if (entry.isIntersecting) void loadMore()
       }
     },
-    { rootMargin: '200px' },
+    { rootMargin: '240px' },
   )
   observer.observe(sentinel)
 
-  if (q.trim()) {
-    startSearch()
-  } else {
-    showEmpty('Busca música, artistas y playlists de SoundCloud', true)
-  }
-
-  const debouncedSuggest = debounce((query: string) => {
+  const debouncedSuggest = debounce((value: string) => {
     api
-      .searchSuggestions(query)
-      .then((list) => renderSuggestions(list))
+      .searchSuggestions(value)
+      .then((list) => {
+        if (!container.isConnected) return
+        if (input.value.trim() !== value) return
+        renderSuggestions(list)
+      })
       .catch(() => {})
   }, 250)
 
+  if (query) {
+    for (const skeleton of skeletonRows(6)) results.appendChild(skeleton)
+    void loadMore()
+  } else {
+    done = true
+    showEmpty('Busca música, artistas y playlists de SoundCloud', true)
+    input.focus()
+  }
+
+  function tabHref(value: string, id: SearchTab): string {
+    if (!value) return link('/search')
+    return id === 'tracks' ? searchLink(value) : link('/search', { q: value, tab: id })
+  }
+
+  function submit(value: string): void {
+    const trimmed = value.trim()
+    hideSuggestions()
+    if (!trimmed) {
+      navigate('/search')
+      return
+    }
+    navigate('/search', tab === 'tracks' ? { q: trimmed } : { q: trimmed, tab })
+  }
+
+  function onKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      if (suggestions.length === 0) return
+      event.preventDefault()
+      const step = event.key === 'ArrowDown' ? 1 : -1
+      const nextIndex = activeIndex < 0 ? (step > 0 ? 0 : suggestions.length - 1) : (activeIndex + step + suggestions.length) % suggestions.length
+      setActive(nextIndex)
+      return
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      const picked = activeIndex >= 0 ? suggestions[activeIndex] : input.value
+      if (activeIndex >= 0) input.value = picked
+      submit(picked)
+      return
+    }
+    if (event.key === 'Escape') {
+      if (suggestions.length > 0) event.preventDefault()
+      hideSuggestions()
+    }
+  }
+
   function requestSuggestions(value: string): void {
-    const query = value.trim()
-    if (query.length < 2) {
+    const trimmed = value.trim()
+    if (trimmed.length < 2) {
       hideSuggestions()
       return
     }
-    debouncedSuggest(query)
+    debouncedSuggest(trimmed)
   }
 
   function renderSuggestions(list: string[]): void {
-    suggestBox.innerHTML = ''
-    for (const suggestion of list) {
+    suggestions = list
+    activeIndex = -1
+    suggestBox.replaceChildren()
+    input.removeAttribute('aria-activedescendant')
+    input.setAttribute('aria-expanded', list.length > 0 ? 'true' : 'false')
+    list.forEach((suggestion, index) => {
       const item = h('button', {
         className: 'suggest-item',
+        type: 'button',
+        id: `${SUGGEST_LIST_ID}-${index}`,
+        role: 'option',
+        'aria-selected': 'false',
         onmousedown: (event: MouseEvent) => {
           event.preventDefault()
-          q = suggestion
           input.value = suggestion
-          hideSuggestions()
-          startSearch()
+          submit(suggestion)
         },
+        onmouseenter: () => setActive(index),
       })
       item.appendChild(iconEl('search', 14))
       item.appendChild(document.createTextNode(suggestion))
       suggestBox.appendChild(item)
+    })
+  }
+
+  function setActive(index: number): void {
+    activeIndex = index
+    const items = suggestBox.children
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i] as HTMLElement
+      const on = i === index
+      item.classList.toggle('active', on)
+      item.setAttribute('aria-selected', on ? 'true' : 'false')
+    }
+    const active = items[index] as HTMLElement | undefined
+    if (active) {
+      input.setAttribute('aria-activedescendant', active.id)
+      active.scrollIntoView({ block: 'nearest' })
+    } else {
+      input.removeAttribute('aria-activedescendant')
     }
   }
 
   function hideSuggestions(): void {
-    suggestBox.innerHTML = ''
+    suggestions = []
+    activeIndex = -1
+    suggestBox.replaceChildren()
+    input.setAttribute('aria-expanded', 'false')
+    input.removeAttribute('aria-activedescendant')
   }
 
-  function startSearch(): void {
-    seq++
-    offset = 0
-    done = false
-    loading = false
-    tracks = []
-    sentinel.innerHTML = ''
-    hideSuggestions()
-    results.innerHTML = ''
-    const query = q.trim()
-    if (!query) {
-      showEmpty('Busca música, artistas y playlists de SoundCloud', true)
-      return
+  async function fetchPage(): Promise<SearchResponse<Track | Playlist | User>> {
+    if (started) {
+      if (!next) return { collection: [], next_href: null }
+      return api.page<Track | Playlist | User>(next)
     }
-    for (const sk of skeletonRows(6)) results.appendChild(sk)
-    void loadMore()
+    if (tab === 'tracks') return api.searchTracks(query, 0, PAGE_SIZE)
+    if (tab === 'playlists') return api.searchPlaylists(query, 0, PAGE_SIZE)
+    if (tab === 'albums') return api.searchAlbums(query, 0, PAGE_SIZE)
+    return api.searchUsers(query, 0, PAGE_SIZE)
   }
 
   async function loadMore(): Promise<void> {
-    const query = q.trim()
-    if (loading || done || !query) return
+    if (loading || done || !query || !container.isConnected) return
     loading = true
-    sentinel.innerHTML = '<div class="spinner"></div>'
-    const mySeq = seq
+    const first = !started
+    if (!first) showLoadingMore(true)
     try {
-      const filters =
-        tab === 'tracks' ? { track: true } : tab === 'playlists' ? { playlist: true, album: true } : { user: true }
-      const res = await api.search(query, offset, 20, filters)
-      if (mySeq !== seq) return
-      const list = res.collection.filter((item) =>
-        tab === 'tracks' ? isTrack(item) : tab === 'playlists' ? isPlaylist(item) : isUser(item),
-      )
-      offset += res.collection.length
-      done = !res.next_href || res.collection.length === 0
-      if (list.length === 0 && offset === 0) {
-        done = true
-        sentinel.innerHTML = ''
-        showEmpty(`Sin resultados para «${query}»`)
-        return
-      }
-      appendResults(list)
-      sentinel.innerHTML = ''
+      const res = await fetchPage()
+      if (!container.isConnected) return
+      started = true
+      if (first) results.replaceChildren()
+      next = res.next_href ?? null
+      done = !next || res.collection.length === 0
+      appendResults(res.collection)
+      if (done && rendered === 0) showEmpty(`Sin resultados para «${query}» en ${tabLabel()}`)
     } catch {
-      if (mySeq !== seq) return
-      if (offset === 0) {
-        done = true
-        sentinel.innerHTML = ''
-        results.innerHTML = ''
-        results.appendChild(pageError('No se pudo completar la búsqueda', () => startSearch()))
+      if (!container.isConnected) return
+      done = true
+      if (rendered === 0) {
+        results.replaceChildren()
+        results.appendChild(pageError('No se pudo completar la búsqueda'))
       } else {
         toastErr('Error al cargar más resultados')
       }
     } finally {
-      if (mySeq === seq) loading = false
+      loading = false
+      showLoadingMore(false)
+      maybeContinue()
     }
   }
 
-  function appendResults(items: Searchable[]): void {
-    if (tab === 'tracks') {
-      const start = tracks.length
-      const list = items as Track[]
-      tracks.push(...list)
-      list.forEach((track, index) => {
-        const idx = start + index
-        results.appendChild(trackRow(track, { showPlays: true, onPlay: () => player.playQueue(tracks, idx) }))
-      })
-      return
+  function maybeContinue(): void {
+    if (!container.isConnected || loading || done) return
+    window.requestAnimationFrame(() => {
+      if (!container.isConnected || loading || done) return
+      if (sentinel.getBoundingClientRect().top < window.innerHeight + 240) void loadMore()
+    })
+  }
+
+  function showLoadingMore(on: boolean): void {
+    sentinel.replaceChildren()
+    if (!on) return
+    for (const skeleton of skeletonRows(2)) sentinel.appendChild(skeleton)
+  }
+
+  function appendResults(items: (Track | Playlist | User)[]): void {
+    for (const item of items) {
+      if (tab === 'users') {
+        results.appendChild(userRow(item as User))
+      } else if (tab === 'tracks') {
+        const track = item as Track
+        const index = tracks.length
+        tracks.push(track)
+        results.appendChild(trackRow(track, { showPlays: true, onPlay: () => player.playQueue(tracks, index) }))
+      } else {
+        results.appendChild(playlistRow(item as Playlist))
+      }
+      rendered++
     }
-    if (tab === 'playlists') {
-      for (const item of items) results.appendChild(playlistRow(item as Playlist))
-      return
-    }
-    for (const item of items) results.appendChild(userRow(item as User))
   }
 
   function playlistRow(pl: Playlist): HTMLElement {
+    const title = typeof pl.title === 'string' && pl.title ? pl.title : 'Sin título'
     const row = h('a', { className: 'result-row playlist-row', href: link(`/playlist/${pl.id}`) })
-    row.appendChild(artEl(pl.artwork_url, pl.title, { size: 't300x300' }))
+    row.appendChild(artEl(pl.artwork_url, title, { size: 't300x300' }))
     const meta = h('div', { className: 'meta' })
-    meta.appendChild(h('div', { className: 'title truncate' }, pl.title))
-    meta.appendChild(h('div', { className: 'sub text-dim' }, `${pl.track_count ?? 0} tracks · ${pl.user.username}`))
+    const titleLine = h('div', { className: 'title-line' })
+    titleLine.appendChild(h('span', { className: 'title truncate' }, title))
+    titleLine.appendChild(h('span', { className: 'kind-badge' }, isAlbum(pl) ? 'Álbum' : 'Playlist'))
+    meta.appendChild(titleLine)
+    const author = pl.user?.username ?? 'Artista desconocido'
+    meta.appendChild(h('div', { className: 'sub text-dim truncate' }, `${pl.track_count ?? 0} tracks · ${author}`))
     row.appendChild(meta)
     return row
   }
@@ -242,23 +335,47 @@ register('search', (route, container) => {
       title.appendChild(badge)
     }
     meta.appendChild(title)
-    meta.appendChild(h('div', { className: 'sub text-dim' }, `${fmtCount(u.followers_count)} seguidores`))
+    const parts = [`${fmtCount(u.followers_count)} seguidores`]
+    if (u.track_count) parts.push(`${fmtCount(u.track_count)} tracks`)
+    meta.appendChild(h('div', { className: 'sub text-dim' }, parts.join(' · ')))
     row.appendChild(meta)
     return row
   }
 
+  function tabLabel(): string {
+    return (TAB_DEFS.find((def) => def.id === tab) ?? TAB_DEFS[0]).label.toLowerCase()
+  }
+
   function showEmpty(message: string, withIcon = false): void {
-    results.innerHTML = ''
+    results.replaceChildren()
     const empty = h('div', { className: 'empty-state' })
     if (withIcon) empty.appendChild(iconEl('search', 44))
     empty.appendChild(h('div', { className: 'text-dim' }, message))
     results.appendChild(empty)
   }
 
-  function pageError(message: string, onRetry: () => void): HTMLElement {
+  function pageError(message: string): HTMLElement {
     const err = h('div', { className: 'page-error' })
     err.appendChild(h('h2', {}, message))
-    err.appendChild(h('button', { className: 'btn btn-primary', onclick: onRetry }, 'Reintentar'))
+    err.appendChild(
+      h(
+        'button',
+        {
+          className: 'btn btn-primary',
+          onclick: () => {
+            started = false
+            done = false
+            next = null
+            rendered = 0
+            tracks = []
+            results.replaceChildren()
+            for (const skeleton of skeletonRows(6)) results.appendChild(skeleton)
+            void loadMore()
+          },
+        },
+        'Reintentar',
+      ),
+    )
     return err
   }
 })
