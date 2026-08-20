@@ -18,7 +18,7 @@ import { clearOffline, offlineStore, removeOffline } from '../core/offline'
 import { shortcutStatus, toggleMiniPlayer } from '../api/native'
 import { remountApp } from '../app'
 import { loadLang, type LangSetting } from '../core/i18n.ts'
-import { OFFLINE_BUDGETS } from '../core/settings'
+import { isMac, OFFLINE_BUDGETS } from '../core/settings'
 import { fmtBytes } from '../core/utils'
 import { cacheBytes, calls, latency, localStorageBytes } from '../core/diag'
 import { CROSSFADE_MAX_S, EQ_BANDS, EQ_MAX_DB, EQ_PRESETS, flatGains, isEqFlat, presetIdFor } from '../player/audiograph'
@@ -612,7 +612,9 @@ register('settings', (_route, container) => {
       keysHint.textContent =
         failed === 0
           ? t('Funcionan con SoundClear en segundo plano.')
-          : `${failed} de ${entries.length} no se pudieron registrar: macOS no siempre cede las teclas de medios a apps que no son nativas, y otra app pudo quedarse el atajo. Las combinaciones con ⌘⌥ son la vía fiable.`
+          : isMac()
+            ? `${failed} de ${entries.length} no se pudieron registrar: macOS no siempre cede las teclas de medios a apps que no son nativas, y otra app pudo quedarse el atajo. Las combinaciones con ⌘⌥ son la vía fiable.`
+            : `${failed} de ${entries.length} no se pudieron registrar: otra app se quedó el atajo antes, o Windows lo reserva para sí. Las combinaciones con Ctrl+Alt son la vía fiable.`
     })
 
     page.appendChild(settingsCard('layout', t('Escritorio'), [miniField, notifyField, keysField]))

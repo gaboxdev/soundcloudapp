@@ -30,7 +30,8 @@ export async function downloadTrackFile(track: Track): Promise<void> {
     }
     toast(t('Descargando el archivo…'))
     const path = await desktopInvoke<string>('download_to_music', { url, name: fileName(track) })
-    const folder = path.replace(/\/[^/]*$/, '')
+    const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+    const folder = cut > 0 ? path.slice(0, cut) : path
     toast(`Guardado en ${folder}`, 'ok')
   } catch {
     toastErr(t('No se pudo descargar el archivo'))

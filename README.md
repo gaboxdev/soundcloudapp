@@ -55,7 +55,10 @@ npm install
 npm run build -w apps/desktop     # requiere Rust estable
 ```
 
-El `.app` queda en `apps/desktop/src-tauri/target/release/bundle/macos/`. Arrástralo a Aplicaciones.
+En macOS el `.app` queda en `apps/desktop/src-tauri/target/release/bundle/macos/`; arrástralo a
+Aplicaciones. En Windows salen dos instaladores en
+`apps/desktop/src-tauri/target/release/bundle/`: `nsis/SoundClear_0.1.0_x64-setup.exe` (3,7 MB) y
+`msi/SoundClear_0.1.0_x64_en-US.msi` (5,2 MB).
 
 Cuando haya binarios, ojo con esto: **no van firmados ni notarizados** (la firma de Apple cuesta 99 $/año y este proyecto no cobra nada). macOS los bloqueará la primera vez — ábrelos con clic derecho › **Abrir**, o quita la cuarentena:
 
@@ -63,7 +66,15 @@ Cuando haya binarios, ojo con esto: **no van firmados ni notarizados** (la firma
 xattr -dr com.apple.quarantine /Applications/SoundClear.app
 ```
 
-Windows y Linux aún no tienen build; Tauri los soporta, así que es cuestión de que alguien lo pruebe (está en el roadmap).
+**Windows ya está probado**: compila y funciona sin cambios de código — sesión, bandeja, mini
+reproductor, acrílico nativo y descargas incluidos. Necesita Rust estable, los **Build Tools de
+Visual Studio** (C++ y el SDK de Windows) y el **WebView2 Runtime**, que Windows 11 ya trae.
+Como el binario no va firmado, SmartScreen avisa la primera vez: **Más información** ›
+**Ejecutar de todas formas**.
+
+Dos diferencias reales frente a macOS: los atajos globales usan **Ctrl+Alt** en vez de ⌘⌥, y la
+ventana lleva la barra de título nativa de Windows además de la cabecera de la app (en macOS van
+fundidas). Linux sigue sin probar.
 
 Si solo quieres verla funcionando sin compilar nada, `npm run dev` te da la versión web en modo invitado.
 

@@ -25,18 +25,25 @@ viejo — sin HMR de tus cambios y persiguiendo un fantasma. Libera el
 puerto antes:
 
 ```bash
-lsof -ti :5173 | xargs -r kill
+lsof -ti :5173 | xargs -r kill                     # macOS/Linux
+```
+
+```powershell
+Get-NetTCPConnection -LocalPort 5173 -State Listen |
+  ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }   # Windows
 ```
 
 Requiere Rust (`cargo --version`). El primer build tarda mucho; con
 `apps/desktop/src-tauri/target/` ya poblado son ~1-2 min. Lánzalo en
 background y espera a la línea `Running \`target/debug/soundclear\``;
 si en su lugar aparece `error[E…]` o `could not compile`, es fallo de
-compilación, no de la app.
+compilación, no de la app. En Windows la línea es
+`Running \`target\debug\soundclear.exe\`` y el enlazador escupe un
+`warning: linker stdout: Creando biblioteca …` que es inofensivo.
 
 La ventana `main` abre a 1240x820 con título **SoundClear**.
 
-### `Server responded with status code 431` en el log
+### `Server responded with status code 431` en el log (macOS)
 
 Vite corre sobre Node, cuyo `max-http-header-size` son 16KB. Una
 petición del webview con una cabecera `Cookie` más grande que eso se
@@ -61,8 +68,8 @@ el servidor.
 
 ### Confirmar que arrancó de verdad
 
-No basta con ver la ventana. `$TMPDIR/soundclear-debug.log` te dice si
-la sesión está viva:
+No basta con ver la ventana. `$TMPDIR/soundclear-debug.log` —en Windows
+`%TEMP%\soundclear-debug.log`— te dice si la sesión está viva:
 
 ```
 me() ok: <usuario>
@@ -82,12 +89,20 @@ login y sale con código 0:
 cd apps/desktop/src-tauri && SOUNDCLEAR_SELFTEST=1 cargo run
 ```
 
+```powershell
+cd apps\desktop\src-tauri; $env:SOUNDCLEAR_SELFTEST = '1'; cargo run   # Windows
+```
+
 ### Ver qué hace
 
 `log_debug` desde TS escribe en `$TMPDIR/soundclear-debug.log`:
 
 ```bash
 tail -f "$TMPDIR/soundclear-debug.log"
+```
+
+```powershell
+Get-Content "$env:TEMP\soundclear-debug.log" -Wait -Tail 20          # Windows
 ```
 
 Es la vía principal de observación en escritorio — la consola del
@@ -97,7 +112,7 @@ webview no la tienes a mano desde aquí.
 
 ```bash
 npm run dev                # http://localhost:5173
-open http://localhost:5173/
+open http://localhost:5173/          # en Windows: start http://localhost:5173/
 ```
 
 Humo por HTTP sin navegador:
@@ -165,6 +180,26 @@ si el grafo está bien conectado.
   `mini`. Una ventana nueva sin registrar ahí no tiene permisos.
 - Host nuevo al que hable el escritorio → `connect-src` del CSP en
   `tauri.conf.json`, o la petición muere en silencio.
+
+## Windows
+
+Compila y corre igual, pero con tres diferencias medidas:
+
+- **Atajos globales: `Ctrl+Alt`**, no ⌘⌥ — la tecla Windows la tiene el
+  sistema y Win+Alt+flechas/F/M salen con «HotKey already registered».
+  Aun con Ctrl+Alt puede quedar alguno fuera si otra app lo tiene
+  cogido; el log dice cuántos de 8 entraron y los ajustes lo pintan.
+- **Barra de título nativa** encima de la cabecera de la app:
+  `titleBarStyle` y `hiddenTitle` son solo de macOS, así que
+  `data-titlebar='overlay'` no se aplica (`index.html` lo condiciona
+  bien) y salen las dos.
+- **El cristal es `apply_acrylic`**, no la vibrancy de macOS: difumina
+  el escritorio de detrás, así que sobre un fondo con color se
+  ensucia más que en Mac.
+
+Lo que sí funciona sin tocar nada: sesión (`me() ok:`), puente
+autenticado, bandeja, mini con protección de contenido, enlaces
+profundos y los dos instaladores (`nsis/*-setup.exe` y `msi/*.msi`).
 
 ## Al terminar
 

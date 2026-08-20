@@ -48,3 +48,43 @@ jobs:
             `xattr -dr com.apple.quarantine /Applications/SoundClear.app`.
 
             Proyecto independiente, sin afiliación con SoundCloud.
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - run: npm ci
+
+      - run: npm run typecheck
+      - run: npm test
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: SoundClear ${{ github.ref_name }}
+          releaseDraft: true
+          releaseBody: |
+            Instalador para Windows x64 (`.exe` de NSIS y `.msi`).
+
+            Necesita el **WebView2 Runtime**, que ya viene en Windows 11 y en
+            Windows 10 actualizado; si falta, el instalador lo descarga.
+
+            **El binario no está firmado.** SmartScreen avisará la primera vez:
+            pulsa **Más información** › **Ejecutar de todas formas**.
+
+            Proyecto independiente, sin afiliación con SoundCloud.

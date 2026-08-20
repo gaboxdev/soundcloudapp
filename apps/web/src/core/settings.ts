@@ -314,6 +314,10 @@ export function applyHistoryNav(historyNav: boolean): void {
   document.documentElement.dataset.historynav = historyNav ? 'si' : 'no'
 }
 
+export function isMac(): boolean {
+  return /Mac OS X|Macintosh/.test(navigator.userAgent)
+}
+
 export function nativeGlassAvailable(): boolean {
   if (!('__TAURI_INTERNALS__' in window)) return false
   return /Mac OS X|Macintosh|Windows/.test(navigator.userAgent)

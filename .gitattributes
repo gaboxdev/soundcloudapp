@@ -1,0 +1,12 @@
+# El repo se escribió en macOS con LF. Git en Windows trae core.autocrlf=true
+# de serie, así que sin esto cada archivo que se toque aquí vuelve con CRLF y
+# el commit sale con el archivo entero cambiado. Forzamos LF en todas partes.
+* text=auto eol=lf
+
+# Binarios: que Git no los toque.
+*.png binary
+*.ico binary
+*.icns binary
+*.jpg binary
+*.woff binary
+*.woff2 binary

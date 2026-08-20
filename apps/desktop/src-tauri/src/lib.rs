@@ -575,16 +575,22 @@ fn shortcut_status(state: State<'_, NativeState>) -> Vec<(String, String, bool)>
 }
 
 fn register_shortcuts(app: &AppHandle) {
-    let combo = Modifiers::SUPER | Modifiers::ALT;
-    let entries: Vec<(&str, Shortcut, &'static str)> = vec![
-        ("Tecla de play/pausa", Shortcut::new(None, Code::MediaPlayPause), "toggle"),
-        ("Tecla de siguiente", Shortcut::new(None, Code::MediaTrackNext), "next"),
-        ("Tecla de anterior", Shortcut::new(None, Code::MediaTrackPrevious), "prev"),
-        ("⌘⌥Espacio", Shortcut::new(Some(combo), Code::Space), "toggle"),
-        ("⌘⌥→", Shortcut::new(Some(combo), Code::ArrowRight), "next"),
-        ("⌘⌥←", Shortcut::new(Some(combo), Code::ArrowLeft), "prev"),
-        ("⌘⌥F", Shortcut::new(Some(combo), Code::KeyF), "like"),
-        ("⌘⌥M", Shortcut::new(Some(combo), Code::KeyM), "mini"),
+    // macOS cede ⌘⌥ sin pelear. En Windows la tecla Windows la tiene el
+    // sistema: Win+Alt+flechas, +F y +M salen con «HotKey already registered»
+    // (4 de 8 fallaban). Ctrl+Alt es el modificador libre ahí.
+    #[cfg(target_os = "macos")]
+    let (combo, prefix) = (Modifiers::SUPER | Modifiers::ALT, "⌘⌥");
+    #[cfg(not(target_os = "macos"))]
+    let (combo, prefix) = (Modifiers::CONTROL | Modifiers::ALT, "Ctrl+Alt+");
+    let entries: Vec<(String, Shortcut, &'static str)> = vec![
+        ("Tecla de play/pausa".to_string(), Shortcut::new(None, Code::MediaPlayPause), "toggle"),
+        ("Tecla de siguiente".to_string(), Shortcut::new(None, Code::MediaTrackNext), "next"),
+        ("Tecla de anterior".to_string(), Shortcut::new(None, Code::MediaTrackPrevious), "prev"),
+        (format!("{prefix}Espacio"), Shortcut::new(Some(combo), Code::Space), "toggle"),
+        (format!("{prefix}→"), Shortcut::new(Some(combo), Code::ArrowRight), "next"),
+        (format!("{prefix}←"), Shortcut::new(Some(combo), Code::ArrowLeft), "prev"),
+        (format!("{prefix}F"), Shortcut::new(Some(combo), Code::KeyF), "like"),
+        (format!("{prefix}M"), Shortcut::new(Some(combo), Code::KeyM), "mini"),
     ];
     let mut status: Vec<(String, String, bool)> = Vec::new();
     for (label, shortcut, command) in entries {
@@ -620,7 +626,11 @@ fn register_shortcuts(app: &AppHandle) {
 fn build_tray(app: &AppHandle) -> Result<(), String> {
     let now = MenuItem::with_id(app, "now", "Nada suena", false, None::<&str>)
         .map_err(|error| error.to_string())?;
-    let toggle = MenuItem::with_id(app, "toggle", "Reproducir o pausar", true, Some("Cmd+Alt+Space"))
+    #[cfg(target_os = "macos")]
+    let toggle_accel = "Cmd+Alt+Space";
+    #[cfg(not(target_os = "macos"))]
+    let toggle_accel = "Ctrl+Alt+Space";
+    let toggle = MenuItem::with_id(app, "toggle", "Reproducir o pausar", true, Some(toggle_accel))
         .map_err(|error| error.to_string())?;
     let prev = MenuItem::with_id(app, "prev", "Anterior", true, None::<&str>)
         .map_err(|error| error.to_string())?;
@@ -1150,7 +1160,11 @@ fn apply_window_glass(app: &AppHandle) {
     #[cfg(target_os = "windows")]
     {
         use window_vibrancy::apply_acrylic;
-        match apply_acrylic(&main, Some((10, 10, 16, 130))) {
+        // El acrílico de Windows difumina el escritorio de detrás, no solo lo
+        // que hay debajo de la ventana como la vibrancy de macOS. Con alfa 130
+        // el fondo se colaba y el velo ambiental (34 % del color del arte) lo
+        // dejaba todo con manchas. 210 acerca la densidad a HudWindow.
+        match apply_acrylic(&main, Some((10, 10, 16, 210))) {
             Ok(()) => debug_log("cristal: acrilico de Windows aplicado"),
             Err(error) => debug_log(&format!("cristal: acrilico no disponible ({error})")),
         }

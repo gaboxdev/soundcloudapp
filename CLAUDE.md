@@ -27,7 +27,7 @@ SOUNDCLEAR_SELFTEST=1 cargo run          # en apps/desktop/src-tauri: client_id 
 
 **La puerta de calidad es `npm run typecheck` + `npm test` + `npm run build`** (sin linter), que es exactamente lo que corre CI (`.github/workflows/ci.yml`; el Worker además tiene su propio job). Termina cualquier tarea con esos dos comandos en verde.
 
-Debug de escritorio: `$TMPDIR/soundclear-debug.log` (comando `log_debug` desde TS).
+Debug de escritorio: `$TMPDIR/soundclear-debug.log` — en Windows `%TEMP%\soundclear-debug.log` (comando `log_debug` desde TS).
 
 En `npm run dev` la app expone `window.soundclear = { player, settings }` (solo con `import.meta.env.DEV`; el bundle de producción no lo contiene). Es la vía para medir el audio desde la consola: `soundclear.player.diagnostics()` devuelve grafo, platos, ganancias, nivel RMS y ajustes, y `await soundclear.auditRoutes()` pasa la auditoría de accesibilidad por las rutas principales.
 

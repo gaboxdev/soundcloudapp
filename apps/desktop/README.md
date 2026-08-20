@@ -4,9 +4,13 @@ App de escritorio de SoundClear construida con [Tauri 2](https://v2.tauri.app/) 
 
 ## Requisitos
 
-- Node.js >= 18
+- Node.js >= 22 (lo pide `engines` en la raíz)
 - Rust (stable) — [rustup](https://rustup.rs/)
 - macOS: Xcode Command Line Tools (`xcode-select --install`)
+- Windows: [Build Tools de Visual Studio](https://visualstudio.microsoft.com/downloads/) con
+  «Desarrollo para escritorio con C++» (aporta el enlazador MSVC y el SDK de Windows) y el
+  [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/), ya incluido en
+  Windows 11. El toolchain de Rust tiene que ser el `-msvc`, no el `-gnu`.
 
 ## Desarrollo
 
