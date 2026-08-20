@@ -149,6 +149,8 @@ Detalles técnicos en [AGENTS.md](./AGENTS.md).
 
 Normas: sin comentarios en el código, UI en español, TS estricto, clases kebab-case, nada de frameworks. Todo el detalle —convenciones, cómo añadir una vista, qué no se acepta— en [CONTRIBUTING.md](./CONTRIBUTING.md).
 
+Antes de abrir el primer issue, el [código de conducta](./CODE_OF_CONDUCT.md) cabe en dos minutos.
+
 ¿Encontraste un fallo de seguridad? No abras un issue: [SECURITY.md](./SECURITY.md) explica cómo reportarlo en privado.
 
 ## ⚖️ Legal

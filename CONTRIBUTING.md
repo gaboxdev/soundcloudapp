@@ -70,6 +70,10 @@ Si añades un eje visual a los ajustes, añádelo también al script inline de `
 
 Los bugs, con las [plantillas de issue](./.github/ISSUE_TEMPLATE). Las vulnerabilidades **no**: eso va en privado, como explica [SECURITY.md](./SECURITY.md).
 
+## Convivencia
+
+El proyecto tiene un [código de conducta](./CODE_OF_CONDUCT.md) corto y en serio. Se resume en discutir el código sin faltar a quien lo escribió.
+
 ## Legal
 
 Al contribuir aceptas que tu código se publique bajo la licencia [MIT](./LICENSE) del proyecto. SoundClear no tiene afiliación con SoundCloud; no aceptamos aportaciones que usen su marca o su logotipo como identidad de la app.
