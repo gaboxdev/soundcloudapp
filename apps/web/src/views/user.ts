@@ -1,21 +1,32 @@
-import type { Playlist, Searchable, Track, User } from '@soundclear/api'
+import type { Playlist, SearchResponse, Searchable, Track, User } from '@soundclear/api'
 import { isPlaylist, isTrack } from '@soundclear/api'
 import { getAPI } from '../api'
-import { skeletonRows, trackRow } from '../components/trackrow'
+import { accountStore } from '../core/account'
+import { trackRow } from '../components/trackrow'
 import { link, register } from '../core/router'
+import { canWrite, isBusy, isFollowing, loadSocial, socialStore, toggleFollow } from '../core/social'
 import { fmtCount } from '../core/utils'
 import { player } from '../player/player'
 import { artEl, avatarEl } from '../ui/artwork'
-import { h, iconEl, svgIcon } from '../ui/el'
+import { h, iconEl, svgIcon, titleIcon } from '../ui/el'
+import { skAvatarRow, skMore, skPlaylistCards, skProfileHead, skReveal, skTrackRows } from '../ui/skeleton'
 import { toast, toastErr } from '../ui/toast'
+import { virtualList, type VirtualList } from '../ui/virtuallist'
 import './user.css'
+import { t } from '../core/i18n.ts'
 
-type UserTab = 'tracks' | 'playlists' | 'likes'
+type UserTab = 'top' | 'tracks' | 'playlists' | 'reposts' | 'likes'
+
+type TabEntry = { kind: 'track'; track: Track; index: number } | { kind: 'playlist'; playlist: Playlist }
 
 interface TabState {
   node: HTMLElement
   tracks: Track[]
+  entries: TabEntry[]
   rendered: number
+  mixed: boolean
+  grid: boolean
+  virtual: VirtualList | null
   next: string | null
   started: boolean
   done: boolean
@@ -24,21 +35,28 @@ interface TabState {
 }
 
 const TAB_DEFS: { id: UserTab; label: string }[] = [
+  { id: 'top', label: 'Populares' },
   { id: 'tracks', label: 'Tracks' },
   { id: 'playlists', label: 'Playlists' },
+  { id: 'reposts', label: 'Publicaciones' },
   { id: 'likes', label: 'Likes' },
 ]
 
 const PAGE_SIZE = 30
+const VIRTUAL_MIN = 60
 const QUEUE_LIMIT = 200
 const QUEUE_PAGES = 12
 const DESC_LIMIT = 320
 const URL_PATTERN = /https?:\/\/[^\s<>"']+/g
 
+function accountId(): number | null {
+  return accountStore.get().user?.id ?? null
+}
+
 function pageError(message: string, onRetry?: () => void): HTMLElement {
   const err = h('div', { className: 'page-error' })
   err.appendChild(h('h2', {}, message))
-  if (onRetry) err.appendChild(h('button', { className: 'btn btn-primary', onclick: onRetry }, 'Reintentar'))
+  if (onRetry) err.appendChild(h('button', { className: 'btn btn-primary', onclick: onRetry }, t('Reintentar')))
   return err
 }
 
@@ -76,10 +94,10 @@ function descriptionEl(text: string): HTMLElement {
   box.appendChild(body)
   if (text.length > DESC_LIMIT || lines.length > 4) {
     body.classList.add('clamped')
-    const toggle = h('button', { className: 'desc-toggle', type: 'button' }, 'Mostrar más')
+    const toggle = h('button', { className: 'desc-toggle', type: 'button' }, t('Mostrar más'))
     toggle.addEventListener('click', () => {
       const clamped = body.classList.toggle('clamped')
-      toggle.textContent = clamped ? 'Mostrar más' : 'Mostrar menos'
+      toggle.textContent = clamped ? 'Mostrar más' : t('Mostrar menos')
     })
     box.appendChild(toggle)
   }
@@ -99,23 +117,23 @@ function bannerEl(url: string): HTMLElement {
 }
 
 register('user', (route, container) => {
-  document.title = 'Perfil — SoundClear'
+  document.title = t('Perfil — SoundClear')
   const id = Number(route.params.id)
   if (!Number.isInteger(id) || id <= 0) {
     container.innerHTML = ''
-    container.appendChild(pageError('Perfil no encontrado'))
+    container.appendChild(pageError(t('Perfil no encontrado')))
     return
   }
 
   const api = getAPI()
-  let tab: UserTab = 'tracks'
+  let tab: UserTab = 'top'
   let profile: User | null = null
 
   container.innerHTML = ''
   const view = h('div', { className: 'user-view' })
 
   const head = h('div', { className: 'profile-head card' })
-  head.appendChild(skeletonHeader())
+  head.appendChild(skProfileHead())
 
   const tabs = h('div', { className: 'chip-row user-tabs', role: 'tablist' })
   const tabButtons = new Map<UserTab, HTMLElement>()
@@ -135,7 +153,11 @@ register('user', (route, container) => {
     tabStates[def.id] = {
       node,
       tracks: [],
+      entries: [],
       rendered: 0,
+      mixed: false,
+      grid: def.id === 'playlists',
+      virtual: null,
       next: null,
       started: false,
       done: false,
@@ -158,6 +180,8 @@ register('user', (route, container) => {
     tabs.appendChild(chip)
   }
 
+  const related = h('section', { className: 'related-artists' })
+
   view.append(head, tabs, results, sentinel)
   container.appendChild(view)
 
@@ -165,6 +189,7 @@ register('user', (route, container) => {
     (entries) => {
       if (!container.isConnected) {
         observer.disconnect()
+        for (const def of TAB_DEFS) tabStates[def.id].virtual?.destroy()
         return
       }
       for (const entry of entries) {
@@ -189,6 +214,7 @@ register('user', (route, container) => {
     }
     for (const def of TAB_DEFS) tabStates[def.id].node.hidden = def.id !== next
     const state = tabStates[next]
+    state.virtual?.refresh()
     if (!state.started && !state.failed) {
       showTabSkeletons(next)
       void loadTab(next)
@@ -198,14 +224,20 @@ register('user', (route, container) => {
     }
   }
 
+  function clearPanel(state: TabState): void {
+    if (state.virtual) {
+      state.virtual.destroy()
+      state.virtual = null
+    }
+    state.rendered = 0
+    state.node.replaceChildren()
+  }
+
   function showTabSkeletons(tabId: UserTab): void {
     const state = tabStates[tabId]
-    state.node.replaceChildren()
-    if (tabId === 'playlists') {
-      for (let i = 0; i < 8; i++) state.node.appendChild(cardSkeleton())
-      return
-    }
-    for (const skeleton of skeletonRows(6)) state.node.appendChild(skeleton)
+    clearPanel(state)
+    const skeletons = tabId === 'playlists' ? skPlaylistCards(8, 'tile') : skTrackRows(6)
+    for (const skeleton of skeletons) state.node.appendChild(skeleton)
   }
 
   async function loadUser(): Promise<void> {
@@ -219,8 +251,8 @@ register('user', (route, container) => {
       if (!container.isConnected) return
       head.replaceChildren(
         wrapBody(
-          pageError('No se pudo cargar el perfil', () => {
-            head.replaceChildren(skeletonHeader())
+          pageError(t('No se pudo cargar el perfil'), () => {
+            head.replaceChildren(skProfileHead())
             void loadUser()
           }),
         ),
@@ -236,6 +268,7 @@ register('user', (route, container) => {
 
   function renderHeader(u: User): void {
     head.replaceChildren()
+    skReveal(head)
     const visual = u.visuals?.visuals?.[0]?.visual_url
     if (visual) {
       head.classList.add('has-banner')
@@ -251,7 +284,7 @@ register('user', (route, container) => {
 
     const name = h('h2', { className: 'profile-name' }, u.username)
     if (u.verified) {
-      const badge = h('span', { className: 'verified', title: 'Verificado' })
+      const badge = h('span', { className: 'verified', title: t('Verificado') })
       badge.innerHTML = svgIcon('check', 16)
       name.appendChild(badge)
     }
@@ -281,9 +314,38 @@ register('user', (route, container) => {
     const actions = h('div', { className: 'profile-actions' })
     const playBtn = h('button', { className: 'btn btn-primary', type: 'button' })
     playBtn.appendChild(iconEl('play', 16))
-    playBtn.appendChild(document.createTextNode('Reproducir tracks'))
+    playBtn.appendChild(document.createTextNode(t('Reproducir tracks')))
     playBtn.addEventListener('click', () => void playAllTracks(playBtn))
     actions.appendChild(playBtn)
+
+    if (canWrite() && u.id !== accountId()) {
+      const followBtn = h('button', { className: 'btn btn-ghost profile-follow', type: 'button' }) as HTMLButtonElement
+      const paintFollow = (): void => {
+        const following = isFollowing(u.id)
+        const busy = isBusy(u.id)
+        followBtn.disabled = busy
+        followBtn.classList.toggle('active', following)
+        followBtn.setAttribute('aria-pressed', String(following))
+        followBtn.replaceChildren(
+          iconEl(following ? 'check' : 'plus', 16),
+          document.createTextNode(busy ? 'Guardando…' : following ? 'Siguiendo' : t('Seguir')),
+        )
+      }
+      paintFollow()
+      followBtn.addEventListener('click', () => void toggleFollow(u))
+      let followAttached = false
+      let unsubFollow: (() => void) | null = null
+      unsubFollow = socialStore.subscribe(() => {
+        if (followAttached && !followBtn.isConnected) {
+          unsubFollow?.()
+          return
+        }
+        followAttached = true
+        paintFollow()
+      })
+      actions.appendChild(followBtn)
+      void loadSocial()
+    }
 
     if (u.permalink_url) {
       const external = h('a', {
@@ -291,20 +353,55 @@ register('user', (route, container) => {
         href: u.permalink_url,
         target: '_blank',
         rel: 'noopener noreferrer',
-        title: 'Abrir el perfil en soundcloud.com',
+        title: t('Abrir el perfil en soundcloud.com'),
       })
       external.appendChild(iconEl('external', 16))
-      external.appendChild(document.createTextNode('Ver en SoundCloud'))
+      external.appendChild(document.createTextNode(t('Ver en SoundCloud')))
       actions.appendChild(external)
     }
     info.appendChild(actions)
 
     body.appendChild(info)
     head.appendChild(body)
+    loadRelated()
+  }
+
+  function loadRelated(): void {
+    if (related.isConnected) return
+    related.replaceChildren(
+      h('div', { className: 'h-section' }, [titleIcon('user', 18), h('span', null, t('Artistas relacionados'))]),
+      skAvatarRow(6),
+    )
+    view.insertBefore(related, tabs)
+    void api
+      .relatedArtists(id, 10)
+      .then((users) => {
+        if (!container.isConnected) return
+        if (users.length === 0) {
+          related.remove()
+          return
+        }
+        related.replaceChildren(h('div', { className: 'h-section' }, [titleIcon('user', 18), h('span', null, t('Artistas relacionados'))]))
+        const row = h('div', { className: 'related-row' })
+        for (const user of users) {
+          const card = h('a', { className: 'related-card', href: link(`/user/${user.id}`), title: user.username })
+          const avatar = avatarEl(user.avatar_url, user.username, 72)
+          avatar.classList.add('related-avatar')
+          card.append(avatar, h('span', { className: 'related-name truncate' }, user.username))
+          card.appendChild(h('span', { className: 'related-sub truncate' }, `${fmtCount(user.followers_count)} seguidores`))
+          row.appendChild(card)
+        }
+        related.appendChild(row)
+        skReveal(row)
+      })
+      .catch(() => {
+        related.remove()
+      })
   }
 
   async function playAllTracks(button: HTMLButtonElement): Promise<void> {
     const state = tabStates.tracks
+    if (!state.started && !state.failed) showTabSkeletons('tracks')
     button.disabled = true
     try {
       let guard = 0
@@ -314,11 +411,11 @@ register('user', (route, container) => {
         if (!container.isConnected) return
       }
       if (state.failed) {
-        toastErr('No se pudieron cargar los tracks')
+        toastErr(t('No se pudieron cargar los tracks'))
         return
       }
       if (state.tracks.length === 0) {
-        toastErr('Este usuario no tiene tracks')
+        toastErr(t('Este usuario no tiene tracks'))
         return
       }
       player.playQueue(state.tracks, 0)
@@ -348,17 +445,17 @@ register('user', (route, container) => {
     const first = !state.started
     if (tabId === tab && !first) syncSentinel(true)
     try {
-      const res =
-        state.started && state.next
-          ? await api.page<Searchable>(state.next)
-          : await api.userContent(id, tabId, 0, PAGE_SIZE)
+      const res = await fetchTab(tabId, state)
       if (!container.isConnected) return
       state.started = true
-      if (first) state.node.replaceChildren()
+      if (first) clearPanel(state)
       state.next = res.next_href ?? null
       state.done = !state.next || res.collection.length === 0
       appendContent(state, res.collection)
-      if (state.done && state.rendered === 0) state.node.replaceChildren(emptyEl(tabId))
+      if (state.done && state.rendered === 0) {
+        clearPanel(state)
+        state.node.appendChild(emptyEl(tabId))
+      }
     } catch {
       if (!container.isConnected) return
       state.done = true
@@ -366,8 +463,9 @@ register('user', (route, container) => {
         state.failed = true
         state.started = false
         state.next = null
-        state.node.replaceChildren(
-          pageError('No se pudo cargar el contenido', () => {
+        clearPanel(state)
+        state.node.appendChild(
+          pageError(t('No se pudo cargar el contenido'), () => {
             state.failed = false
             state.done = false
             showTabSkeletons(tabId)
@@ -375,9 +473,22 @@ register('user', (route, container) => {
           }),
         )
       } else {
-        toastErr('Error al cargar más contenido')
+        toastErr(t('Error al cargar más contenido'))
       }
     }
+  }
+
+  async function fetchTab(tabId: UserTab, state: TabState): Promise<SearchResponse<Searchable>> {
+    if (state.started && state.next) return api.page<Searchable>(state.next)
+    if (tabId === 'top') {
+      const tracks = await api.userTopTracks(id, PAGE_SIZE)
+      return { collection: tracks, next_href: null }
+    }
+    if (tabId === 'reposts') {
+      const res = await api.userPosts(id, 0, PAGE_SIZE)
+      return { collection: res.collection as unknown as Searchable[], next_href: res.next_href }
+    }
+    return api.userContent(id, tabId, 0, PAGE_SIZE)
   }
 
   function appendContent(state: TabState, items: unknown[]): void {
@@ -385,17 +496,47 @@ register('user', (route, container) => {
       const item = unwrapItem(raw)
       if (!item) continue
       if (isTrack(item)) {
-        const index = state.tracks.length
+        state.entries.push({ kind: 'track', track: item, index: state.tracks.length })
         state.tracks.push(item)
-        state.node.appendChild(
-          trackRow(item, { showPlays: true, onPlay: () => player.playQueue(state.tracks, index) }),
-        )
-        state.rendered++
       } else if (isPlaylist(item)) {
-        state.node.appendChild(playlistCard(item))
-        state.rendered++
+        state.entries.push({ kind: 'playlist', playlist: item })
+        state.mixed = true
       }
     }
+    renderEntries(state)
+  }
+
+  function rowFor(state: TabState, index: number): HTMLElement {
+    const entry = state.entries[index]
+    if (!entry) return h('div')
+    if (entry.kind === 'playlist') return playlistCard(entry.playlist)
+    return trackRow(entry.track, {
+      showPlays: true,
+      onPlay: () => player.playQueue(state.tracks, entry.index),
+    })
+  }
+
+  function renderEntries(state: TabState): void {
+    if (!state.grid && !state.mixed && state.entries.length > VIRTUAL_MIN) {
+      let list = state.virtual
+      if (!list) {
+        const owner = state
+        list = virtualList({ row: (index) => rowFor(owner, index) })
+        state.virtual = list
+        state.node.replaceChildren(list.el)
+      }
+      list.setCount(state.entries.length)
+      state.rendered = state.entries.length
+      return
+    }
+    if (state.virtual) clearPanel(state)
+    if (state.rendered >= state.entries.length) return
+    const fragment = document.createDocumentFragment()
+    for (let index = state.rendered; index < state.entries.length; index++) {
+      fragment.appendChild(rowFor(state, index))
+    }
+    state.node.appendChild(fragment)
+    state.rendered = state.entries.length
   }
 
   function maybeContinue(): void {
@@ -411,16 +552,16 @@ register('user', (route, container) => {
   function syncSentinel(loadingMore = false): void {
     sentinel.replaceChildren()
     if (!loadingMore) return
-    for (const skeleton of skeletonRows(2)) sentinel.appendChild(skeleton)
+    sentinel.appendChild(skMore(2))
   }
 
   function playlistCard(pl: Playlist): HTMLElement {
-    const title = typeof pl.title === 'string' && pl.title ? pl.title : 'Sin título'
+    const title = typeof pl.title === 'string' && pl.title ? pl.title : t('Sin título')
     const card = h('a', { className: 'playlist-card', href: link(`/playlist/${pl.id}`) })
     card.appendChild(artEl(pl.artwork_url, title, { size: 't500x500' }))
     const meta = h('div', { className: 'pl-meta' })
     meta.appendChild(h('div', { className: 'pl-title truncate' }, title))
-    const kind = pl.is_album === true || pl.set_type === 'album' ? 'Álbum' : 'Playlist'
+    const kind = pl.is_album === true || pl.set_type === 'album' ? 'Álbum' : t('Playlist')
     const author = pl.user?.username
     const sub = author && author !== profile?.username ? `${kind} · ${pl.track_count ?? 0} tracks · ${author}` : `${kind} · ${pl.track_count ?? 0} tracks`
     meta.appendChild(h('div', { className: 'pl-count text-faint truncate' }, sub))
@@ -430,35 +571,19 @@ register('user', (route, container) => {
 
   function emptyEl(tabId: UserTab): HTMLElement {
     const empty = h('div', { className: 'empty-state' })
-    empty.appendChild(iconEl(tabId === 'likes' ? 'heart' : tabId === 'playlists' ? 'playlist' : 'music', 40))
+    const icon =
+      tabId === 'likes' ? 'heart' : tabId === 'playlists' ? 'playlist' : tabId === 'reposts' ? 'repost' : 'music'
+    empty.appendChild(iconEl(icon, 40))
     empty.appendChild(h('div', { className: 'text-dim' }, emptyText(tabId)))
     return empty
   }
 
   function emptyText(tabId: UserTab): string {
-    if (tabId === 'tracks') return 'Este usuario aún no tiene tracks'
-    if (tabId === 'playlists') return 'Este usuario aún no tiene playlists'
-    return 'Este usuario aún no tiene likes'
+    if (tabId === 'top') return t('Este usuario aún no tiene tracks populares')
+    if (tabId === 'tracks') return t('Este usuario aún no tiene tracks')
+    if (tabId === 'playlists') return t('Este usuario aún no tiene playlists')
+    if (tabId === 'reposts') return t('Este usuario aún no ha publicado nada')
+    return t('Este usuario aún no tiene likes')
   }
 
-  function cardSkeleton(): HTMLElement {
-    const card = h('div', { className: 'sk-card' })
-    card.appendChild(h('div', { className: 'skeleton sk-card-art' }))
-    card.appendChild(h('div', { className: 'skeleton sk-line', style: { width: '70%' } }))
-    card.appendChild(h('div', { className: 'skeleton sk-line', style: { width: '45%' } }))
-    return card
-  }
-
-  function skeletonHeader(): HTMLElement {
-    const body = h('div', { className: 'profile-body' })
-    const sk = h('div', { className: 'profile-skel' })
-    sk.appendChild(h('div', { className: 'skeleton sk-avatar' }))
-    const lines = h('div', { className: 'sk-lines' })
-    lines.appendChild(h('div', { className: 'skeleton sk-line', style: { width: '50%', height: '16px' } }))
-    lines.appendChild(h('div', { className: 'skeleton sk-line', style: { width: '34%' } }))
-    lines.appendChild(h('div', { className: 'skeleton sk-line', style: { width: '42%' } }))
-    sk.appendChild(lines)
-    body.appendChild(sk)
-    return body
-  }
 })

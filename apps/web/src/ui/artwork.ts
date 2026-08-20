@@ -26,7 +26,12 @@ export function artEl(url: string | null, label: string, opts: ArtworkOptions = 
     img.loading = 'lazy'
     img.decoding = 'async'
     img.alt = ''
-    img.addEventListener('load', () => img.classList.add('loaded'))
+    frame.classList.add('art-loading')
+    img.addEventListener('load', () => {
+      img.classList.add('loaded')
+      frame.classList.remove('art-loading')
+    })
+    img.addEventListener('error', () => frame.classList.remove('art-loading'))
     img.src = src
     frame.appendChild(img)
   }
@@ -46,18 +51,19 @@ export function avatarEl(url: string | null, label: string, size = 40): HTMLElem
   el.style.cssText = `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;position:relative;flex-shrink:0;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--text2);`
   el.style.setProperty('--avatar-size', `${size}px`)
   el.textContent = initials(label)
-  const src = artworkUrl(url, 't120x120')
+  const src = artworkUrl(url, size > 60 ? 't300x300' : 't120x120')
   if (src) {
     const img = new Image()
-    img.loading = 'lazy'
     img.decoding = 'async'
-    img.style.cssText = 'width:100%;height:100%;object-fit:cover;'
     img.alt = ''
+    el.classList.add('art-loading')
     img.addEventListener('load', () => {
-      el.textContent = ''
-      el.appendChild(img)
+      img.classList.add('loaded')
+      el.classList.remove('art-loading')
     })
+    img.addEventListener('error', () => el.classList.remove('art-loading'))
     img.src = src
+    el.appendChild(img)
   }
   return el
 }

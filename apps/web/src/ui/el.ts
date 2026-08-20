@@ -95,6 +95,20 @@ const ICON_PATHS: Record<string, string> = {
   plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
   repost: '<path d="m16 3 4 4-4 4"/><path d="M20 7H9a5 5 0 0 0-5 5"/><path d="m8 21-4-4 4-4"/><path d="M4 17h11a5 5 0 0 0 5-5"/>',
   expand: '<path d="M15 3h6v6"/><path d="m14 10 7-7"/><path d="M9 21H3v-6"/><path d="m10 14-7 7"/>',
+  radio: '<circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 0 0 7"/><path d="M15.5 15.5a5 5 0 0 0 0-7"/><path d="M5.5 5.5a9 9 0 0 0 0 13"/><path d="M18.5 18.5a9 9 0 0 0 0-13"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.9 4.9l1.4 1.4"/><path d="M17.7 17.7l1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M4.9 19.1l1.4-1.4"/><path d="M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5Z"/>',
+  waves: '<path d="M2 8c2.5-3 5.5-3 8 0s5.5 3 8 0l4-2"/><path d="M2 15c2.5-3 5.5-3 8 0s5.5 3 8 0l4-2"/>',
+  list: '<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3.5 6h.01"/><path d="M3.5 12h.01"/><path d="M3.5 18h.01"/>',
+  layout: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/>',
+  filter: '<path d="M4 5h16l-6.2 7.4V19l-3.6-2v-4.6Z"/>',
+  more: '<circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
+  speed: '<path d="M4 18a9 9 0 1 1 16 0"/><path d="m12 14 4.5-4.5"/><circle cx="12" cy="15" r="1.4" fill="currentColor" stroke="none"/>',
+  tag: '<path d="M20.6 12.6 12 21.2l-8.6-8.6V4.4h8.2Z"/><path d="M7.5 8h.01"/>',
+  keyboard: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01"/><path d="M10 10h.01"/><path d="M14 10h.01"/><path d="M18 10h.01"/><path d="M7 14h10"/>',
+  refresh: '<path d="M21 12a9 9 0 1 1-3.2-6.9"/><path d="M21 4v5h-5"/>',
+  trend: '<path d="M3 17 9.5 10.5l3.5 3.5L21 6"/><path d="M21 12V6h-6"/>',
+  command: '<path d="M8 8V6.5a2.5 2.5 0 1 0-2.5 2.5H8Zm0 0h8m-8 0v8m8-8V6.5A2.5 2.5 0 1 1 18.5 9H16Zm0 7v1.5a2.5 2.5 0 1 0 2.5-2.5H16Zm0 0H8m0 0v1.5A2.5 2.5 0 1 1 5.5 15H8Z"/>',
 }
 
 export function iconEl(name: string, size = 20): HTMLElement {
@@ -102,6 +116,26 @@ export function iconEl(name: string, size = 20): HTMLElement {
   wrap.innerHTML = svgIcon(name, size)
   wrap.style.display = 'inline-flex'
   return wrap
+}
+
+export function titleIcon(name: string, size = 22): HTMLElement {
+  const wrap = document.createElement('span')
+  wrap.className = 'title-icon'
+  wrap.innerHTML = svgIcon(name, size)
+  return wrap
+}
+
+export function iconChip(icon: string, label: string, active = false): HTMLButtonElement {
+  const chip = h('button', { className: active ? 'chip active' : 'chip', type: 'button' })
+  chip.append(iconEl(icon, 15), h('span', { className: 'btn-label' }, label))
+  return chip
+}
+
+export function labelBtn(className: string, icon: string, label: string): { btn: HTMLButtonElement; label: HTMLElement } {
+  const btn = h('button', { className, type: 'button' })
+  const text = h('span', { className: 'btn-label' }, label)
+  btn.append(iconEl(icon, 15), text)
+  return { btn, label: text }
 }
 
 export function fmtHtml(template: string): HTMLElement {

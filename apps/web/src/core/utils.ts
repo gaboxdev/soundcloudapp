@@ -47,7 +47,7 @@ export function formatDate(iso: string | null | undefined): string {
   return date.toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-const ARTWORK_SIZE = /-t(\d{3,4}x\d{3,4})(\.\w+)$/
+const ARTWORK_SIZE = /-(t\d{2,4}x\d{2,4}|original|large|badge|small|mini|tiny)(\.\w+)$/
 
 export function artworkUrl(url: string | null | undefined, size = 't500x500'): string | null {
   if (!url) return null
@@ -59,8 +59,10 @@ export function artworkUrl(url: string | null | undefined, size = 't500x500'): s
 export function initials(label: string): string {
   const parts = label.trim().split(/\s+/).filter(Boolean)
   if (parts.length === 0) return '?'
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return (parts[0][0] + parts[1][0]).toUpperCase()
+  const first = [...parts[0]]
+  if (parts.length === 1) return first.slice(0, 2).join('').toUpperCase()
+  const second = [...parts[1]]
+  return (first[0] + second[0]).toUpperCase()
 }
 
 export function debounce<A extends unknown[]>(fn: (...args: A) => void, delay: number): (...args: A) => void {
@@ -69,6 +71,14 @@ export function debounce<A extends unknown[]>(fn: (...args: A) => void, delay: n
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => fn(...args), delay)
   }
+}
+
+export function fmtBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 MB'
+  const mb = bytes / (1024 * 1024)
+  if (mb < 1) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  if (mb < 1024) return `${mb < 10 ? Math.round(mb * 10) / 10 : Math.round(mb)} MB`
+  return `${Math.round((mb / 1024) * 10) / 10} GB`
 }
 
 export function clamp(value: number, min: number, max: number): number {

@@ -14,9 +14,12 @@
     "dev:desktop": "npm run dev:desktop -w apps/desktop",
     "build": "npm run build -w apps/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "preview": "npm run preview -w apps/web"
+    "preview": "npm run preview -w apps/web",
+    "test": "node --test \"apps/web/test/*.test.ts\"",
+    "probe": "node scripts/api-probe.mjs",
+    "i18n": "node scripts/i18n-audit.mjs"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   }
 }

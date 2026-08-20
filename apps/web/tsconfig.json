@@ -3,7 +3,12 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable",
+      "WebWorker"
+    ],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
@@ -14,7 +19,15 @@
     "noFallthroughCasesInSwitch": true,
     "verbatimModuleSyntax": true,
     "useDefineForClassFields": true,
-    "types": ["vite/client", "@tauri-apps/api"]
+    "types": [
+      "vite/client",
+      "@tauri-apps/api"
+    ],
+    "allowImportingTsExtensions": true
   },
-  "include": ["src", "../../packages/soundcloud-api/src", "vite.config.ts"]
+  "include": [
+    "src",
+    "../../packages/soundcloud-api/src",
+    "vite.config.ts"
+  ]
 }

@@ -6,7 +6,7 @@
 
 SoundClear es un **cliente nativo de SoundCloud** — no es un wrapper de la web. Habla directamente con la API de SoundCloud, renderiza su propia UI, y funciona como **PWA en el navegador** y como **app de escritorio (Tauri)** con el mismo código.
 
-**~21 KB de JavaScript** (gzip) para la app completa. Sin React, sin Vue, sin Svelte: TypeScript vanilla + CSS. El resto es disciplina.
+**~80 KB de JavaScript + 17 KB de CSS** (gzip) para la app completa, radio infinita y paleta de comandos incluidas. Sin React, sin Vue, sin Svelte: TypeScript vanilla + CSS. El resto es disciplina.
 
 Un regalo para la comunidad de SoundCloud. MIT, para quien lo quiera, como se hizo siempre.
 
@@ -18,16 +18,29 @@ Un regalo para la comunidad de SoundCloud. MIT, para quien lo quiera, como se hi
 |---|---|
 | 🎧 **Reproductor con waveform** | Scrubber visual interactivo, seek por rangos HTTP, preview de 30s para tracks Go+ (SNIP) |
 | 🔑 **Inicio de sesión con SoundCloud** | App de escritorio: entra con tu propia cuenta, ve tu perfil y tus likes sincronizados |
-| 🔎 **Búsqueda en vivo** | Sugerencias mientras escribes, resultados por tracks / playlists / usuarios, scroll infinito |
+| ✍️ **Escribe en tu cuenta** | Escritorio: seguir artistas, repostear, añadir a tus playlists, crear playlists y **guardar la cola como playlist** |
+| 📰 **Tu feed** | Escritorio: lo que publican y repostean los artistas que sigues, con scroll infinito, y un historial que cruza dispositivos |
+| 🔎 **Búsqueda en vivo** | Sugerencias mientras escribes, resultados por tracks / playlists / álbumes / usuarios, scroll infinito y filtros por duración, antigüedad, género y licencia (enlazables por URL) |
+| 🎚️ **Motor de audio** | Ecualizador de 5 bandas con presets, nivelado suave y **transiciones entre tracks** (encadenado o crossfade de hasta 12 s, con precarga del siguiente) |
+| 📥 **Sin conexión** | Guarda tracks en el dispositivo y suenan con la red cortada, con presupuesto de espacio y gestión en Ajustes › Datos; descarga del archivo original cuando el autor la permite (en escritorio, a tu carpeta de música) |
+| 🖥️ **Escritorio de verdad** | Atajos globales (⌘⌥Espacio, ⌘⌥←/→, ⌘⌥F), controles en la bandeja, **mini reproductor** siempre encima que no sale en las capturas de pantalla, aviso opcional al cambiar de track y la ventana recuerda dónde estaba |
+| ♿ **Accesible de verdad** | Todo alcanzable con teclado (flechas para recorrer listas), foco siempre visible, objetivos de 24 px, anuncio del track para lectores de pantalla y contraste AA en los 7 acentos y los dos temas |
+| 🌍 **Español e inglés** | Detecta tu idioma y se cambia en caliente sin recargar; el diccionario inglés solo se descarga si lo usas |
+| 🧭 **Explorar** | Radios por género, las etiquetas que de verdad filtran, álbumes destacados y «se parece a lo tuyo» a partir de tu historial |
+| 🔗 **Enlaces** | Pega un enlace de SoundCloud en ⌘K y se abre la ficha; compartir con el menú del sistema y esquema `soundclear://` en escritorio |
+| 📻 **Radio infinita** | Cuando la cola se acaba sigue sola con la radio de SoundCloud; «Empezar radio» desde cualquier track o artista |
+| ⌘ **Paleta de comandos** | `⌘K` para ir a cualquier sitio, cambiar cualquier ajuste o buscar música sin soltar el teclado |
+| ▶️ **Ahora suena** | Vista a pantalla completa con carátula grande, onda, velocidad, temporizador y la cola en vivo |
 | 📈 **Charts** | Tendencias globales con ranks + 28 géneros para explorar |
 | 🏠 **Feed de inicio** | Selecciones curadas de SoundCloud (mixed-selections) |
 | 🎵 **Tracks y playlists** | Descripción, comentarios con scroll infinito, tracks relacionados, descargas cuando el autor las permite |
-| 👤 **Perfiles** | Tracks, playlists y likes de cualquier usuario |
+| 👤 **Perfiles** | Populares, tracks, playlists, publicaciones (con reposts), likes y artistas relacionados |
 | 📚 **Cola** | Repeat (off/todo/uno), shuffle, persistencia en localStorage |
 | ❤️ **Favoritos e historial** | Tus favoritos sincronizados con tu cuenta de SoundCloud; historial local |
-| ⚡ **Atajos** | `Espacio` play/pausa · `←/→` ±5s · `N/P` siguiente/anterior · `M` silenciar. Soporta Media Session (teclas multimedia del sistema) |
-| 🌗 **Temas** | Oscuro / claro / sistema |
-| 📱 **PWA** | Instalable, service worker con caché de arte y waveforms. La sesión es obligatoria y hoy solo existe en escritorio (ver abajo) |
+| ⚡ **Atajos** | `Espacio` play/pausa · `←/→` ±5 s (`⇧` ±15 s) · `↑/↓` volumen · `N/P` · `M` silenciar · `F` favorito · `X` radio · `A` ahora suena · `/` buscar · `?` ayuda. Soporta Media Session (teclas multimedia del sistema) |
+| ⏱️ **Velocidad y temporizador** | 0.75×–2× y «pausar en 15/30/60/120 min» |
+| 🌗 **Apariencia** | Oscuro / claro / sistema, cinco acentos con contraste verificado, tres niveles de cristal, densidad cómoda o compacta, barra superior fija / al desplazar / oculta |
+| 📱 **PWA** | Instalable, service worker con caché de arte y waveforms. Se puede usar entera en modo invitado; la sesión con tu cuenta solo existe en escritorio (ver abajo) |
 | 🖥️ **Escritorio** | Tauri 2: binario nativo de pocos MB, sin Electron |
 | 🎨 **Skeletons + blur-up** | La UI nunca se siente vacía: carga instantánea, imágenes lazy |
 

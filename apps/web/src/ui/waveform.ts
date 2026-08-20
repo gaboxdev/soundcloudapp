@@ -42,7 +42,7 @@ function fmt(ms: number): string {
 
 export function waveformEl(options: WaveformOptions = {}): WaveformController {
   const wrap = document.createElement('div')
-  wrap.className = 'waveform loading skeleton'
+  wrap.className = 'waveform loading'
 
   const ns = 'http://www.w3.org/2000/svg'
   const svg = document.createElementNS(ns, 'svg')
@@ -90,7 +90,6 @@ export function waveformEl(options: WaveformOptions = {}): WaveformController {
 
   function setLoadingState(loading: boolean): void {
     wrap.classList.toggle('loading', loading)
-    wrap.classList.toggle('skeleton', loading)
   }
 
   function ratioFromEvent(event: PointerEvent): number {

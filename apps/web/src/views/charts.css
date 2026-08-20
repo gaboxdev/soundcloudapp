@@ -28,3 +28,49 @@
   gap: 10px;
   font-size: 14px;
 }
+
+.charts-search {
+  margin-left: auto;
+  width: min(280px, 100%);
+  max-width: none;
+}
+
+.charts-search-clear {
+  width: 26px;
+  height: 26px;
+  margin-right: -4px;
+}
+
+.charts-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -4px 0 14px;
+  font-size: 13px;
+}
+
+.charts-filter .chip {
+  padding: 5px 12px;
+  font-size: 12.5px;
+}
+
+.charts-filter-genre {
+  color: var(--accent-text);
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+.charts-nomatch {
+  padding: 34px 20px;
+}
+
+@media (max-width: 700px) {
+  .charts-search {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+.charts-filter[hidden] {
+  display: none;
+}

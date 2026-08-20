@@ -1,0 +1,46 @@
+.feed-list {
+  gap: 10px;
+}
+
+.feed-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.feed-reason {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text3);
+  min-width: 0;
+}
+
+.feed-reason-icon {
+  display: inline-flex;
+  color: var(--accent-text);
+  flex-shrink: 0;
+}
+
+.feed-reason-avatar {
+  box-shadow: 0 0 0 1px var(--hairline-2);
+}
+
+.feed-caption {
+  font-weight: 400;
+  color: var(--text3);
+  min-width: 0;
+}
+
+.feed-item .playlist-row {
+  margin-top: 2px;
+}
+
+@media (max-width: 640px) {
+  .feed-caption {
+    display: none;
+  }
+}

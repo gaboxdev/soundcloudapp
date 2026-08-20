@@ -13,7 +13,46 @@ export interface AccountState {
 
 export const accountStore = createStore<AccountState>({ status: 'unknown', user: null })
 
+const GUEST_KEY = 'sl:guest'
+
 let refreshing: Promise<void> | null = null
+let guest = readGuest()
+
+function readGuest(): boolean {
+  try {
+    return localStorage.getItem(GUEST_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function guestAllowed(): boolean {
+  return guest
+}
+
+export function hasAccount(): boolean {
+  return isDesktop() && accountStore.get().status === 'ready' && accountStore.get().user !== null
+}
+
+export function allowGuest(): void {
+  guest = true
+  try {
+    localStorage.setItem(GUEST_KEY, '1')
+  } catch {
+    guest = true
+  }
+  accountStore.set({ status: accountStore.get().status === 'ready' ? 'ready' : 'guest' })
+}
+
+export function revokeGuest(): void {
+  guest = false
+  try {
+    localStorage.removeItem(GUEST_KEY)
+  } catch {
+    guest = false
+  }
+  accountStore.set({ status: accountStore.get().status })
+}
 
 function debugLog(message: string): void {
   if (!isDesktop()) return

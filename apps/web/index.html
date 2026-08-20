@@ -20,9 +20,30 @@
           var topbar = saved && saved.topbar
           document.documentElement.dataset.topbar =
             topbar === 'auto' || topbar === 'oculta' ? topbar : 'fija'
+          var accent = saved && saved.accent
+          var accents = ['cian', 'ambar', 'verde', 'rosa', 'soundcloud', 'tono']
+          document.documentElement.dataset.accent = accents.indexOf(accent) >= 0 ? accent : 'violeta'
+          var navLabels = saved && saved.navLabels
+          document.documentElement.dataset.navlabels = navLabels === 'texto' ? 'texto' : 'iconos'
+          var iconStyle = saved && saved.iconStyle
+          document.documentElement.dataset.icons = iconStyle === 'insignia' ? 'insignia' : 'plano'
+          document.documentElement.dataset.historynav =
+            saved && saved.historyNav === false ? 'no' : 'si'
+          var toneCss = localStorage.getItem('sl:accent-css')
+          if (toneCss) {
+            var tone = document.createElement('style')
+            tone.id = 'sl-accent-tone'
+            tone.textContent = toneCss
+            document.head.appendChild(tone)
+          }
+          document.documentElement.dataset.density = saved && saved.density === 'compacta' ? 'compacta' : 'comoda'
           if ('__TAURI_INTERNALS__' in window) {
-            document.documentElement.dataset.backdrop = 'system'
             document.documentElement.dataset.shell = 'desktop'
+            var backdrop = saved && saved.backdrop
+            var nativeGlass = /Mac OS X|Macintosh|Windows/.test(navigator.userAgent)
+            if (backdrop === 'sistema' || ((backdrop === 'auto' || !backdrop) && nativeGlass)) {
+              document.documentElement.dataset.backdrop = 'system'
+            }
             if (/Mac OS X|Macintosh/.test(navigator.userAgent)) {
               document.documentElement.dataset.titlebar = 'overlay'
             }

@@ -1,33 +1,27 @@
 import './styles/acrylic.css'
 import './styles/design.css'
-import { bootstrapApp } from './app'
+import './styles/skeleton.css'
 import { initSettings } from './core/settings'
+import { loadLang } from './core/i18n.ts'
 import { isTauri } from '@soundclear/api'
-import './views/home'
-import './views/charts'
-import './views/search'
-import './views/track'
-import './views/playlist'
-import './views/user'
-import './views/queue'
-import './views/likes'
-import './views/settings'
 
 async function boot(): Promise<void> {
-  initSettings()
+  const settings = initSettings()
+  await loadLang(settings.lang)
   if (isTauri()) {
     try {
       const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
       const label = getCurrentWebviewWindow().label
+      if (label === 'mini') {
+        const { bootstrapMini } = await import('./mini/mini')
+        await bootstrapMini()
+        return
+      }
       if (label && label !== 'main') return
     } catch {}
   }
-  bootstrapApp()
-  if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').catch(() => {})
-    })
-  }
+  const { startApp } = await import('./boot')
+  await startApp()
 }
 
 void boot()

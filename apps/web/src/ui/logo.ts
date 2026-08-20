@@ -1,3 +1,22 @@
+const BARS: readonly (readonly [number, number, number])[] = [
+  [0, 114, 104],
+  [72, 62, 208],
+  [144, 10, 312],
+  [216, 62, 208],
+  [288, 114, 104],
+]
+
+function rects(extra: (index: number) => string): string {
+  return BARS.map(([x, y, height], index) => {
+    return `<rect x="${x}" y="${y}" width="44" height="${height}" rx="22"${extra(index)}/>`
+  }).join('')
+}
+
 export function appLogo(size = 28): string {
-  return `<svg width="${size}" height="${size}" viewBox="0 0 332 332" fill="currentColor" aria-hidden="true"><rect x="0" y="114" width="44" height="104" rx="22"/><rect x="72" y="62" width="44" height="208" rx="22"/><rect x="144" y="10" width="44" height="312" rx="22"/><rect x="216" y="62" width="44" height="208" rx="22"/><rect x="288" y="114" width="44" height="104" rx="22"/></svg>`
+  return `<svg width="${size}" height="${size}" viewBox="0 0 332 332" fill="currentColor" aria-hidden="true">${rects(() => '')}</svg>`
+}
+
+export function appLogoLive(size = 56): string {
+  const body = rects((index) => ` class="logo-bar" style="--bar:${index}"`)
+  return `<svg class="logo-live" width="${size}" height="${size}" viewBox="0 0 332 332" fill="currentColor" aria-hidden="true">${body}</svg>`
 }

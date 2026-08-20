@@ -1,26 +1,47 @@
-import type { PlaylistSummary, Selection, Track, User } from '@soundclear/api'
+import type { PlaylistSummary, Selection, StreamPost, Track, User } from '@soundclear/api'
 import { isPlaylistSummary } from '@soundclear/api'
 import { getAPI } from '../api'
-import { skeletonRows, trackRow } from '../components/trackrow'
+import { hasAccount } from '../core/account'
+import { postReason } from './feed'
+import { trackRow } from '../components/trackrow'
 import { link, register } from '../core/router'
 import { fmtCount, fmtTime } from '../core/utils'
 import { player } from '../player/player'
 import { artEl, artOverlay } from '../ui/artwork'
-import { h, iconEl, svgIcon } from '../ui/el'
+import { h, iconEl, svgIcon, titleIcon } from '../ui/el'
+import { skHome, skReveal } from '../ui/skeleton'
 import { toast } from '../ui/toast'
 import './home.css'
+import { t } from '../core/i18n.ts'
 
 const TRENDING_LIMIT = 12
 const SELECTIONS_LIMIT = 8
+const RESUME_LIMIT = 10
+const FEED_LIMIT = 10
+
+const GENRE_SHORTCUTS: { slug: string; label: string }[] = [
+  { slug: 'house', label: 'House' },
+  { slug: 'techno', label: 'Techno' },
+  { slug: 'hiphop', label: 'Hip-Hop' },
+  { slug: 'trap', label: 'Trap' },
+  { slug: 'drum-and-bass', label: 'Drum & Bass' },
+  { slug: 'indie', label: 'Indie' },
+  { slug: 'pop', label: 'Pop' },
+  { slug: 'rock', label: 'Rock' },
+  { slug: 'latin', label: 'Latina' },
+  { slug: 'ambient', label: 'Ambient' },
+  { slug: 'jazz', label: 'Jazz' },
+  { slug: 'chill-hop', label: 'Chill Hop' },
+]
 
 const SELECTION_TITLES: Record<string, string> = {
   'soundcloud:selections:trending-by-genre-playlists': 'Tendencias por género',
   'soundcloud:selections:buzzing': 'Artistas emergentes',
   'soundcloud:selections:personalised-curated-global': 'Seleccionado por SoundCloud',
-  'soundcloud:selections:charts-top': 'Lo más escuchado',
-  'soundcloud:selections:charts-trending': 'Nuevo y en tendencia',
-  'soundcloud:selections:new-for-you': 'Nuevo para ti',
-  'soundcloud:selections:weekly': 'Novedades de la semana',
+  'soundcloud:selections:charts-top': t('Lo más escuchado'),
+  'soundcloud:selections:charts-trending': t('Nuevo y en tendencia'),
+  'soundcloud:selections:new-for-you': t('Nuevo para ti'),
+  'soundcloud:selections:weekly': t('Novedades de la semana'),
 }
 
 function selectionTitle(selection: Selection): string {
@@ -33,20 +54,24 @@ function selectionItems(selection: Selection): PlaylistSummary[] {
 }
 
 register('home', (_route, container) => {
-  document.title = 'Inicio — SoundClear'
+  document.title = t('Inicio — SoundClear')
   const api = getAPI()
   let seq = 0
 
   async function load(): Promise<void> {
     const mySeq = ++seq
-    container.innerHTML = ''
-    for (const skeleton of skeletonRows(8)) container.appendChild(skeleton)
+    container.replaceChildren(skHome())
 
-    const [charts, selections] = await Promise.allSettled([
+    const [charts, selections, feed] = await Promise.allSettled([
       api.charts(undefined, undefined, 0, TRENDING_LIMIT),
       api.mixedSelections(SELECTIONS_LIMIT),
+      hasAccount() ? api.stream(FEED_LIMIT) : Promise.resolve(null),
     ])
     if (mySeq !== seq || !container.isConnected) return
+    const feedPosts =
+      feed.status === 'fulfilled' && feed.value
+        ? feed.value.collection.filter((post): post is StreamPost & { track: Track } => Boolean(post.track))
+        : []
 
     let tracks: Track[] = []
     let ranked = true
@@ -73,24 +98,89 @@ register('home', (_route, container) => {
       return
     }
 
-    renderHome(tracks, ranked, sections)
+    renderHome(tracks, ranked, sections, feedPosts)
   }
 
-  function renderHome(tracks: Track[], ranked: boolean, sections: Selection[]): void {
+  function renderHome(
+    tracks: Track[],
+    ranked: boolean,
+    sections: Selection[],
+    feedPosts: (StreamPost & { track: Track })[],
+  ): void {
     container.innerHTML = ''
+    skReveal(container)
     const featured = tracks[0]
     if (featured) container.appendChild(heroEl(featured, tracks))
+    if (feedPosts.length > 0) container.appendChild(feedSectionEl(feedPosts))
+    const resume = resumeSectionEl()
+    if (resume) container.appendChild(resume)
     if (tracks.length > 0) container.appendChild(tracksSectionEl(tracks, ranked))
+    container.appendChild(genresSectionEl())
     for (const section of sections) container.appendChild(selectionEl(section))
+  }
+
+  function feedSectionEl(posts: (StreamPost & { track: Track })[]): HTMLElement {
+    const queue = posts.map((post) => post.track)
+    const heading = h('div', { className: 'h-section' }, [titleIcon('user', 18), h('span', { className: 'truncate' }, t('De quien sigues'))])
+    heading.appendChild(h('a', { className: 'see-more link-hover', href: link('/feed') }, t('Ver todo')))
+    const row = h('div', { className: 'home-carousel' })
+    posts.forEach((post, index) => {
+      const track = post.track
+      const card = h('button', { className: 'home-card resume-card', type: 'button', title: `Reproducir «${track.title}»` })
+      const art = artEl(track.artwork_url, track.title, { size: 't300x300' })
+      art.classList.add('home-card-art')
+      card.append(
+        art,
+        h('span', { className: 'home-card-title truncate' }, track.title),
+        h('span', { className: 'home-card-sub truncate' }, postReason(post)),
+      )
+      card.addEventListener('click', () => player.playQueue(queue, index))
+      row.appendChild(card)
+    })
+    return h('section', { className: 'home-section' }, [heading, row])
+  }
+
+  function resumeSectionEl(): HTMLElement | null {
+    const history = player.store.get().history.slice(0, RESUME_LIMIT)
+    if (history.length === 0) return null
+    const queue = history.map((entry) => entry.track)
+    const heading = h('div', { className: 'h-section' }, [titleIcon('clock', 18), h('span', { className: 'truncate' }, t('Sigue escuchando'))])
+    const radio = h('button', { className: 'see-more link-hover', type: 'button' }, t('Radio con esto'))
+    radio.addEventListener('click', () => void player.startRadio(queue[0]))
+    heading.appendChild(radio)
+    const row = h('div', { className: 'home-carousel' })
+    queue.forEach((track, index) => {
+      const card = h('button', { className: 'home-card resume-card', type: 'button', title: `Reproducir «${track.title}»` })
+      const art = artEl(track.artwork_url, track.title, { size: 't300x300' })
+      art.classList.add('home-card-art')
+      card.append(
+        art,
+        h('span', { className: 'home-card-title truncate' }, track.title),
+        h('span', { className: 'home-card-sub truncate' }, track.user?.username ?? t('Artista desconocido')),
+      )
+      card.addEventListener('click', () => player.playQueue(queue, index))
+      row.appendChild(card)
+    })
+    return h('section', { className: 'home-section' }, [heading, row])
+  }
+
+  function genresSectionEl(): HTMLElement {
+    const heading = h('div', { className: 'h-section' }, [titleIcon('tag', 18), h('span', { className: 'truncate' }, t('Explora por género'))])
+    heading.appendChild(h('a', { className: 'see-more link-hover', href: link('/charts') }, t('Ver charts')))
+    const row = h('div', { className: 'chip-row home-genres' })
+    for (const genre of GENRE_SHORTCUTS) {
+      row.appendChild(h('a', { className: 'chip', href: link('/charts', { genre: genre.slug }) }, genre.label))
+    }
+    return h('section', { className: 'home-section' }, [heading, row])
   }
 
   function renderError(): void {
     container.innerHTML = ''
     container.appendChild(
       h('div', { className: 'page-error' }, [
-        h('h2', {}, 'No se pudo cargar el inicio'),
-        h('p', { className: 'text-dim' }, 'Comprueba tu conexión e inténtalo de nuevo.'),
-        h('div', {}, [h('button', { className: 'btn btn-primary', onclick: () => void load() }, 'Reintentar')]),
+        h('h2', {}, t('No se pudo cargar el inicio')),
+        h('p', { className: 'text-dim' }, t('Comprueba tu conexión e inténtalo de nuevo.')),
+        h('div', {}, [h('button', { className: 'btn btn-primary', onclick: () => void load() }, t('Reintentar'))]),
       ]),
     )
   }
@@ -99,8 +189,8 @@ register('home', (_route, container) => {
     container.innerHTML = ''
     const empty = h('div', { className: 'empty-state' }, [
       iconEl('music', 44),
-      h('p', {}, 'SoundCloud no está devolviendo recomendaciones ahora mismo.'),
-      h('div', {}, [h('button', { className: 'btn btn-ghost', onclick: () => void load() }, 'Actualizar')]),
+      h('p', {}, t('SoundCloud no está devolviendo recomendaciones ahora mismo.')),
+      h('div', {}, [h('button', { className: 'btn btn-ghost', onclick: () => void load() }, t('Actualizar'))]),
     ])
     container.appendChild(empty)
   }
@@ -117,7 +207,7 @@ register('home', (_route, container) => {
     const fav = h('button', { className: 'icon-btn' })
     const paintLike = (liked: boolean): void => {
       fav.dataset.liked = String(liked)
-      fav.title = liked ? 'Quitar de favoritos' : 'Guardar en favoritos'
+      fav.title = liked ? 'Quitar de favoritos' : t('Guardar en favoritos')
       fav.innerHTML = svgIcon(liked ? 'heartFill' : 'heart', 20)
     }
     paintLike(player.isLiked(track))
@@ -126,7 +216,7 @@ register('home', (_route, container) => {
       player.toggleLike(track)
       const liked = player.isLiked(track)
       paintLike(liked)
-      toast(liked ? 'Guardado en favoritos' : 'Quitado de favoritos', 'ok')
+      toast(liked ? 'Guardado en favoritos' : t('Quitado de favoritos'), 'ok')
     })
 
     let unsub: (() => void) | null = null
@@ -148,7 +238,7 @@ register('home', (_route, container) => {
     const meta = h('div', { className: 'hero-meta' }, [
       user
         ? h('a', { className: 'link-hover', href: link(`/user/${user.id}`) }, user.username)
-        : h('span', { className: 'text-faint' }, 'Artista desconocido'),
+        : h('span', { className: 'text-faint' }, t('Artista desconocido')),
       h('span', { className: 'hero-dot' }, '•'),
       h('span', {}, fmtTime(track.duration)),
       h('span', { className: 'hero-dot' }, '•'),
@@ -158,7 +248,7 @@ register('home', (_route, container) => {
     return h('section', { className: 'hero card' }, [
       art,
       h('div', { className: 'hero-info' }, [
-        h('span', { className: 'hero-kicker' }, 'Destacado'),
+        h('span', { className: 'hero-kicker' }, t('Destacado')),
         h('a', { className: 'hero-title truncate link-hover', href: link(`/track/${track.id}`) }, track.title),
         meta,
         h('div', { className: 'hero-actions' }, [play, fav]),
@@ -178,16 +268,17 @@ register('home', (_route, container) => {
       }),
     )
     const heading = h('div', { className: 'h-section' }, [
-      h('span', { className: 'truncate' }, ranked ? 'Tendencias' : 'Destacados'),
+      titleIcon(ranked ? 'trend' : 'waves', 18),
+      h('span', { className: 'truncate' }, ranked ? 'Tendencias' : t('Destacados')),
     ])
-    if (ranked) heading.appendChild(h('a', { className: 'see-more link-hover', href: link('/charts') }, 'Ver más'))
+    if (ranked) heading.appendChild(h('a', { className: 'see-more link-hover', href: link('/charts') }, t('Ver más')))
     return h('section', { className: 'home-section' }, [heading, h('div', { className: 'home-list' }, rows)])
   }
 
   function selectionEl(selection: Selection): HTMLElement {
     const cards = selectionItems(selection).map((item) => cardEl(item))
     return h('section', { className: 'home-section' }, [
-      h('div', { className: 'h-section' }, [h('span', { className: 'truncate' }, selectionTitle(selection))]),
+      h('div', { className: 'h-section' }, [titleIcon('playlist', 18), h('span', { className: 'truncate' }, selectionTitle(selection))]),
       h('div', { className: 'home-carousel' }, cards),
     ])
   }

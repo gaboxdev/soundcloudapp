@@ -212,6 +212,24 @@ export interface QuerySuggestion {
   query?: string
 }
 
+export type StreamPostType = 'track' | 'track-repost' | 'playlist' | 'playlist-repost' | string
+
+export interface StreamPost {
+  type: StreamPostType
+  created_at: string
+  caption?: string | null
+  user?: User
+  uuid?: string
+  track?: Track
+  playlist?: Playlist
+}
+
+export interface PlayHistoryEntry {
+  played_at?: number
+  track_urn?: string
+  track?: Track
+}
+
 export interface StreamUrlEnvelope {
   url: string
 }

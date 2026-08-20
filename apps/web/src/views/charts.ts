@@ -1,15 +1,18 @@
 import type { Track } from '@soundclear/api'
 import { getAPI } from '../api'
-import { skeletonRows, trackRow } from '../components/trackrow'
-import { link, register } from '../core/router'
+import { trackRow } from '../components/trackrow'
+import { link, navigate, register } from '../core/router'
 import { player } from '../player/player'
-import { h, iconEl } from '../ui/el'
+import { h, iconEl, svgIcon, titleIcon } from '../ui/el'
+import { skMore, skTrackList } from '../ui/skeleton'
 import { toastErr } from '../ui/toast'
 import './charts.css'
+import { t } from '../core/i18n.ts'
 
 const PAGE_SIZE = 20
 const MAX_EMPTY_PAGES = 3
 const SCROLL_MARGIN = 300
+const FILTER_MAX_LOADS = 6
 
 const GENRE_LABELS: Record<string, string> = {
   ambient: 'Ambient',
@@ -51,14 +54,26 @@ function genreLabel(slug: string): string {
   )
 }
 
+function fold(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function trackMatches(track: Track, terms: string[]): boolean {
+  const haystack = fold(`${track.title} ${track.user?.username ?? ''} ${track.genre ?? ''} ${track.tag_list ?? ''}`)
+  return terms.every((term) => haystack.includes(term))
+}
+
 register('charts', (route, container) => {
   const api = getAPI()
   const slugs = api.genres()
   const requested = route.params.genre ?? ''
   const slug = slugs.includes(requested) ? requested : null
-  const heading = slug ? `Novedades de ${genreLabel(slug)}` : 'Tendencias'
+  const heading = slug ? `Novedades de ${t(genreLabel(slug))}` : t('Tendencias')
 
-  document.title = `Charts · ${slug ? genreLabel(slug) : 'Tendencias'} — SoundClear`
+  document.title = `Charts · ${slug ? t(genreLabel(slug)) : t('Tendencias')} — SoundClear`
   container.innerHTML = ''
 
   let offset = 0
@@ -70,24 +85,87 @@ register('charts', (route, container) => {
   const loaded: Track[] = []
   const seen = new Set<number>()
 
+  const rows: { track: Track; el: HTMLElement }[] = []
+  let query = ''
+  let terms: string[] = []
+  let filterLoads = 0
+
   const list = h('div', { className: 'charts-list' })
   const sentinel = h('div', { className: 'load-more' })
 
   const chips = h('div', { className: 'chip-row charts-genres' })
-  chips.appendChild(chipEl('Tendencias', null))
-  for (const item of slugs) chips.appendChild(chipEl(genreLabel(item), item))
+  chips.appendChild(chipEl(t('Tendencias'), null))
+  for (const item of slugs) chips.appendChild(chipEl(t(genreLabel(item)), item))
+
+  const searchBox = h('div', { className: 'search-input charts-search' })
+  searchBox.innerHTML = svgIcon('search', 16)
+  const searchInput = h('input', {
+    type: 'text',
+    autocomplete: 'off',
+    spellcheck: 'false',
+    placeholder: t('Busca dentro de los charts…'),
+    'aria-label': t('Buscar dentro de los charts'),
+  }) as HTMLInputElement
+  const searchClear = h('button', {
+    className: 'icon-btn charts-search-clear',
+    type: 'button',
+    title: t('Limpiar la búsqueda'),
+    'aria-label': t('Limpiar la búsqueda'),
+  })
+  searchClear.innerHTML = svgIcon('close', 15)
+  searchClear.hidden = true
+  searchBox.append(searchInput, searchClear)
 
   const head = h('div', { className: 'charts-head' }, [
-    h('h1', { className: 'h-section charts-title' }, heading),
+    h('h1', { className: 'h-section charts-title' }, [titleIcon(slug ? 'tag' : 'trend', 20), h('span', null, heading)]),
     h(
       'span',
       { className: 'chip chip-static' },
-      slug ? 'Lo más reciente del género · sin ranking' : 'Ranking real de SoundCloud',
+      slug ? 'Lo más reciente del género · sin ranking' : t('Ranking real de SoundCloud'),
     ),
+    searchBox,
   ])
 
-  container.append(chips, head, list, sentinel)
-  for (const skeleton of skeletonRows(8)) list.appendChild(skeleton)
+  const filterInfo = h('div', { className: 'charts-filter' })
+  filterInfo.hidden = true
+  const filterCount = h('span', { className: 'text-faint' })
+  const filterGenre = h('a', { className: 'chip charts-filter-genre' })
+  filterGenre.hidden = true
+  const filterGlobal = h('button', { className: 'chip charts-filter-global', type: 'button' })
+  filterInfo.append(filterCount, filterGenre, filterGlobal)
+
+  const noMatch = h('div', { className: 'empty-state charts-nomatch' }, [
+    iconEl('search', 40),
+    h('p', {}, t('Nada con ese texto entre los tracks cargados.')),
+  ])
+  noMatch.hidden = true
+
+  container.append(chips, head, filterInfo, list, noMatch, sentinel)
+  list.appendChild(skTrackList(8, { rank: !slug }))
+
+  searchInput.addEventListener('input', () => {
+    const next = searchInput.value.trim()
+    if (next === query) return
+    query = next
+    terms = fold(query).split(/\s+/).filter(Boolean)
+    filterLoads = 0
+    searchClear.hidden = query === ''
+    applyFilter()
+    renderSentinel()
+    pump()
+  })
+
+  searchInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && query !== '') {
+      event.preventDefault()
+      clearSearch()
+      return
+    }
+    if (event.key === 'Enter' && query !== '') navigate('/search', { q: query })
+  })
+
+  searchClear.addEventListener('click', () => clearSearch())
+  filterGlobal.addEventListener('click', () => navigate('/search', { q: query }))
 
   const observer = new IntersectionObserver(
     (entries) => {
@@ -105,6 +183,50 @@ register('charts', (route, container) => {
 
   void load()
 
+  function clearSearch(): void {
+    query = ''
+    terms = []
+    filterLoads = 0
+    searchInput.value = ''
+    searchClear.hidden = true
+    applyFilter()
+    renderSentinel()
+    searchInput.focus()
+  }
+
+  function genreSuggestion(): string | null {
+    if (terms.length === 0) return null
+    return (
+      slugs.find((item) => item !== slug && terms.some((term) => fold(t(genreLabel(item))) === term || fold(item) === term)) ??
+      slugs.find((item) => item !== slug && terms.some((term) => term.length >= 3 && fold(t(genreLabel(item))).includes(term))) ??
+      null
+    )
+  }
+
+  function applyFilter(): void {
+    let visible = 0
+    for (const row of rows) {
+      const on = terms.length === 0 || trackMatches(row.track, terms)
+      row.el.hidden = !on
+      if (on) visible += 1
+    }
+    if (query === '') {
+      filterInfo.hidden = true
+      noMatch.hidden = true
+      return
+    }
+    filterInfo.hidden = false
+    filterCount.textContent = `${visible} de ${rows.length} tracks cargados`
+    filterGlobal.textContent = `Buscar «${query}» en todo SoundCloud`
+    const suggestion = genreSuggestion()
+    filterGenre.hidden = suggestion === null
+    if (suggestion) {
+      filterGenre.textContent = `Ver charts de ${genreLabel(suggestion)}`
+      filterGenre.href = link('/charts', { genre: suggestion })
+    }
+    noMatch.hidden = visible > 0 || loading || !(done || failed || filterLoads >= FILTER_MAX_LOADS)
+  }
+
   function chipEl(text: string, target: string | null): HTMLElement {
     const active = target === slug
     return h(
@@ -118,8 +240,10 @@ register('charts', (route, container) => {
     )
   }
 
-  async function load(): Promise<void> {
+  async function load(manual = false): Promise<void> {
     if (loading || done || failed || !container.isConnected) return
+    if (query !== '' && !manual && filterLoads >= FILTER_MAX_LOADS) return
+    if (query !== '') filterLoads += 1
     loading = true
     const first = loaded.length === 0
     renderSentinel()
@@ -144,6 +268,7 @@ register('charts', (route, container) => {
       nextHref = next
       if (first) list.innerHTML = ''
       const added = appendTracks(tracks)
+      applyFilter()
       if (added === 0) emptyPages += 1
       else emptyPages = 0
       done = !next || emptyPages >= MAX_EMPTY_PAGES
@@ -155,10 +280,11 @@ register('charts', (route, container) => {
         renderError()
       } else {
         failed = true
-        toastErr('No se pudieron cargar más tracks')
+        toastErr(t('No se pudieron cargar más tracks'))
       }
     } finally {
       loading = false
+      applyFilter()
       renderSentinel()
       pump()
     }
@@ -171,16 +297,18 @@ register('charts', (route, container) => {
       seen.add(track.id)
       loaded.push(track)
       added += 1
-      list.appendChild(
-        trackRow(track, {
-          rank: slug ? undefined : loaded.length,
-          showPlays: true,
-          onPlay: (clicked) => {
-            const index = loaded.findIndex((item) => item.id === clicked.id)
-            player.playQueue(loaded, Math.max(0, index))
-          },
-        }),
-      )
+      const row = trackRow(track, {
+        rank: slug ? undefined : loaded.length,
+        showPlays: true,
+        onPlay: (clicked) => {
+          const visible = rows.filter((item) => !item.el.hidden).map((item) => item.track)
+          const pool = visible.length > 1 ? visible : loaded
+          const index = pool.findIndex((item) => item.id === clicked.id)
+          player.playQueue(pool, Math.max(0, index))
+        },
+      })
+      rows.push({ track, el: row })
+      list.appendChild(row)
     }
     return added
   }
@@ -195,13 +323,26 @@ register('charts', (route, container) => {
   function renderSentinel(): void {
     sentinel.innerHTML = ''
     if (loading) {
-      sentinel.appendChild(h('div', { className: 'spinner' }))
+      if (loaded.length > 0) sentinel.appendChild(skMore(2, { rank: !slug }))
+      return
+    }
+    if (!failed && query !== '' && !done && filterLoads >= FILTER_MAX_LOADS) {
+      sentinel.appendChild(
+        h('div', { className: 'charts-retry' }, [
+          h('span', { className: 'text-dim' }, t('Hemos mirado unas cuantas páginas de los charts.')),
+          h(
+            'button',
+            { className: 'btn btn-ghost btn-sm', onclick: () => void load(true) },
+            t('Seguir buscando más abajo'),
+          ),
+        ]),
+      )
       return
     }
     if (!failed) return
     sentinel.appendChild(
       h('div', { className: 'charts-retry' }, [
-        h('span', { className: 'text-dim' }, 'Se cortó la carga de más tracks.'),
+        h('span', { className: 'text-dim' }, t('Se cortó la carga de más tracks.')),
         h(
           'button',
           {
@@ -211,7 +352,7 @@ register('charts', (route, container) => {
               void load()
             },
           },
-          'Reintentar',
+          t('Reintentar'),
         ),
       ]),
     )
@@ -223,19 +364,21 @@ register('charts', (route, container) => {
     done = false
     failed = false
     emptyPages = 0
+    filterLoads = 0
     loaded.length = 0
+    rows.length = 0
     seen.clear()
-    list.innerHTML = ''
-    for (const skeleton of skeletonRows(8)) list.appendChild(skeleton)
+    list.replaceChildren(skTrackList(8, { rank: !slug }))
     void load()
   }
 
   function renderEmpty(): void {
     list.innerHTML = ''
+    rows.length = 0
     list.appendChild(
       h('div', { className: 'empty-state' }, [
         iconEl('music', 44),
-        h('p', {}, 'SoundCloud no está devolviendo tracks para esta selección.'),
+        h('p', {}, t('SoundCloud no está devolviendo tracks para esta selección.')),
       ]),
     )
   }
@@ -244,9 +387,9 @@ register('charts', (route, container) => {
     list.innerHTML = ''
     list.appendChild(
       h('div', { className: 'page-error' }, [
-        h('h2', {}, slug ? 'No se pudieron cargar las novedades' : 'No se pudieron cargar los charts'),
-        h('p', { className: 'text-dim' }, 'Comprueba tu conexión e inténtalo de nuevo.'),
-        h('div', {}, [h('button', { className: 'btn btn-primary', onclick: () => retry() }, 'Reintentar')]),
+        h('h2', {}, slug ? 'No se pudieron cargar las novedades' : t('No se pudieron cargar los charts')),
+        h('p', { className: 'text-dim' }, t('Comprueba tu conexión e inténtalo de nuevo.')),
+        h('div', {}, [h('button', { className: 'btn btn-primary', onclick: () => retry() }, t('Reintentar'))]),
       ]),
     )
   }

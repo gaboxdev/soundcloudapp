@@ -2,13 +2,16 @@ import type {
   ChartItem,
   Comment,
   DownloadUrlEnvelope,
+  PlayHistoryEntry,
   Playlist,
   QuerySuggestion,
   SearchResponse,
   Searchable,
   Selection,
+  StreamPost,
   StreamUrlEnvelope,
   Track,
+  Transcoding,
   User,
 } from './types'
 import { API_BASE, ApiError, isTauri, resetClientIdCache, type Transport } from './transport'
@@ -23,6 +26,19 @@ export interface SearchFilters {
 
 export type UserContentKind = 'tracks' | 'playlists' | 'likes' | 'followings' | 'followers'
 
+export type TrackDuration = 'short' | 'medium' | 'long' | 'epic'
+
+export type TrackFreshness = 'last_hour' | 'last_day' | 'last_week' | 'last_month' | 'last_year'
+
+export interface TrackSearchFilters {
+  duration?: TrackDuration
+  createdAt?: TrackFreshness
+  genre?: string
+  commercial?: boolean
+}
+
+export type StationKind = 'track' | 'artist'
+
 export type StreamProtocol = 'progressive' | 'hls'
 
 export interface StreamTarget {
@@ -30,6 +46,30 @@ export interface StreamTarget {
   protocol: StreamProtocol
   mimeType: string
   snipped?: boolean
+}
+
+const PLAIN_PROTOCOLS: readonly string[] = ['progressive', 'hls']
+
+export function plainTranscodings(track: Track): Transcoding[] {
+  return (track.media?.transcodings ?? []).filter((t) => PLAIN_PROTOCOLS.includes(t.format.protocol))
+}
+
+export function isDrmOnly(track: Track): boolean {
+  const list = track.media?.transcodings ?? []
+  if (list.length === 0) return false
+  if (!list.some((t) => t.format.protocol.includes('encrypted'))) return false
+  return plainTranscodings(track).every((t) => t.is_legacy_transcoding === true)
+}
+
+function uniqueIds(ids: number[]): number[] {
+  const seen = new Set<number>()
+  const out: number[] = []
+  for (const id of ids) {
+    if (typeof id !== 'number' || seen.has(id)) continue
+    seen.add(id)
+    out.push(id)
+  }
+  return out
 }
 
 function unwrapLike(item: unknown): Searchable[] {
@@ -76,6 +116,47 @@ const ALL_MUSIC = 'all-music'
 const GENRE_SLUGS: string[] = Object.keys(GENRES).filter((slug) => slug !== ALL_MUSIC)
 
 const IDS_BATCH_SIZE = 50
+
+const STATION_LIMIT = 50
+
+const IDS_PAGE_SIZE = 200
+
+const IDS_MAX_PAGES = 15
+
+const SEARCH_GENRES: readonly string[] = [
+  'House',
+  'Techno',
+  'Deep House',
+  'Hip Hop',
+  'Rap',
+  'Trap',
+  'Drum & Bass',
+  'Dubstep',
+  'EDM',
+  'Pop',
+  'Rock',
+  'Metal',
+  'Punk',
+  'Indie',
+  'R&B',
+  'Soul',
+  'Funk',
+  'Disco',
+  'Jazz',
+  'Classical',
+  'Ambient',
+  'Lo-Fi',
+  'Phonk',
+  'Reggaeton',
+  'Salsa',
+  'Cumbia',
+  'Afrobeats',
+  'K-pop',
+  'Country',
+  'Folk',
+  'Reggae',
+  'Soundtrack',
+]
 
 export class SoundCloudAPI {
   constructor(private readonly transport: Transport) {}
@@ -124,8 +205,13 @@ export class SoundCloudAPI {
     return this.mapPaged<Searchable>(await this.get('/search', params))
   }
 
-  async searchTracks(q: string, offset = 0, limit = 20): Promise<SearchResponse<Track>> {
-    return this.mapPaged<Track>(await this.get('/search/tracks', { q, offset, limit }))
+  async searchTracks(q: string, offset = 0, limit = 20, filters: TrackSearchFilters = {}): Promise<SearchResponse<Track>> {
+    const params: Record<string, string | number | boolean | undefined> = { q, offset, limit }
+    if (filters.duration) params['filter.duration'] = filters.duration
+    if (filters.createdAt) params['filter.created_at'] = filters.createdAt
+    if (filters.genre) params['filter.genre'] = filters.genre
+    if (filters.commercial) params['filter.license'] = 'to_modify_commercially'
+    return this.mapPaged<Track>(await this.get('/search/tracks', params))
   }
 
   async searchPlaylists(q: string, offset = 0, limit = 20): Promise<SearchResponse<Playlist>> {
@@ -170,6 +256,39 @@ export class SoundCloudAPI {
     const paged = this.mapPaged<Searchable>(response)
     if (kind !== 'likes') return paged
     return { ...paged, collection: ((response.collection ?? []) as unknown[]).flatMap(unwrapLike) }
+  }
+
+  async userTopTracks(id: number, limit = 20): Promise<Track[]> {
+    const response = await this.get<SearchResponse<Track>>(`/users/${id}/toptracks`, { limit })
+    return (response.collection ?? []).filter((track) => typeof track?.title === 'string')
+  }
+
+  async relatedArtists(id: number, limit = 12): Promise<User[]> {
+    const response = await this.get<SearchResponse<User>>(`/users/${id}/relatedartists`, { limit })
+    return (response.collection ?? []).filter((user) => typeof user?.username === 'string')
+  }
+
+  async trackPlaylists(id: number, limit = 12): Promise<Playlist[]> {
+    const response = await this.get<SearchResponse<Playlist>>(`/tracks/${id}/playlists_without_albums`, { limit })
+    return (response.collection ?? []).filter((playlist) => typeof playlist?.title === 'string')
+  }
+
+  async userPosts(id: number, offset = 0, limit = 20): Promise<SearchResponse<StreamPost>> {
+    return this.mapPaged<StreamPost>(await this.get(`/stream/users/${id}`, { offset, limit }))
+  }
+
+  async stationTracks(kind: StationKind, id: number): Promise<Track[]> {
+    const urn = encodeURIComponent(`soundcloud:${kind}-stations:${id}`)
+    const response = await this.get<SearchResponse<Track>>(`/stations/${urn}/tracks`, { limit: STATION_LIMIT })
+    const partial = (response.collection ?? []).filter((track) => typeof track?.id === 'number')
+    if (partial.length === 0) return []
+    try {
+      const full = await this.tracksByIds(partial.map((track) => track.id))
+      if (full.length > 0) return full
+    } catch {
+      return partial
+    }
+    return partial
   }
 
   async tracksByIds(ids: number[]): Promise<Track[]> {
@@ -256,14 +375,157 @@ export class SoundCloudAPI {
     } as SearchResponse<Searchable>
   }
 
-  async toggleAccountLike(trackId: number, liked: boolean): Promise<void> {
-    const url = await this.buildUrl(`/me/likes/${trackId}`, {})
-    const body = liked ? { item_urn: `soundcloud:tracks:${trackId}` } : undefined
-    await this.transport.authedRequest(liked ? 'PUT' : 'DELETE', url, body)
+  async toggleAccountLike(trackId: number, liked: boolean, userId?: number): Promise<void> {
+    const paths = userId ? [`/users/${userId}/track_likes/${trackId}`, `/me/likes/${trackId}`] : [`/me/likes/${trackId}`]
+    let last: unknown = null
+    for (const path of paths) {
+      const url = await this.buildUrl(path, {})
+      const body = liked && path.startsWith('/me/likes') ? { item_urn: `soundcloud:tracks:${trackId}` } : undefined
+      try {
+        await this.transport.authedRequest(liked ? 'PUT' : 'DELETE', url, body)
+        return
+      } catch (error) {
+        last = error
+        const status = error instanceof ApiError ? error.status : 0
+        if (status !== 404 && status !== 405 && status !== 422) throw error
+      }
+    }
+    throw last instanceof Error ? last : new Error('el favorito no se pudo guardar en la cuenta')
+  }
+
+  private async authed<T>(method: string, path: string, params: Record<string, string | number | boolean | undefined> = {}, body?: unknown): Promise<T> {
+    const url = await this.buildUrl(path, params)
+    return (await this.transport.authedRequest(method, url, body)) as T
+  }
+
+  private async authedPaged<T>(
+    path: string,
+    params: Record<string, string | number | boolean | undefined>,
+    next: string | null,
+  ): Promise<SearchResponse<T>> {
+    const url = next ? await this.buildUrl(next, {}) : await this.buildUrl(path, { ...params, linked_partitioning: 1 })
+    const response = (await this.transport.authedRequest('GET', url)) as SearchResponse<unknown>
+    return {
+      ...response,
+      collection: (response.collection ?? []) as T[],
+      next_href: response.next_href ? this.transport.rewriteHref(response.next_href) : null,
+    } as SearchResponse<T>
+  }
+
+  async stream(limit = 20, next: string | null = null): Promise<SearchResponse<StreamPost>> {
+    const response = await this.authedPaged<StreamPost>('/stream', { limit }, next)
+    const collection = response.collection.filter(
+      (post) => post && typeof post === 'object' && (post.track !== undefined || post.playlist !== undefined),
+    )
+    return { ...response, collection }
+  }
+
+  async playHistory(limit = 50, next: string | null = null): Promise<SearchResponse<PlayHistoryEntry>> {
+    const response = await this.authedPaged<PlayHistoryEntry>('/me/play-history/tracks', { limit }, next)
+    const collection = response.collection.filter((entry) => entry && typeof entry === 'object' && entry.track !== undefined)
+    return { ...response, collection }
+  }
+
+  private async collectIds(path: string): Promise<number[]> {
+    const ids: number[] = []
+    let next: string | null = null
+    for (let page = 0; page < IDS_MAX_PAGES; page++) {
+      const url = next ? await this.buildUrl(next, {}) : await this.buildUrl(path, { limit: IDS_PAGE_SIZE, linked_partitioning: 1 })
+      const response = (await this.transport.authedRequest('GET', url)) as { collection?: unknown[]; next_href?: string | null }
+      for (const item of response.collection ?? []) {
+        if (typeof item === 'number') ids.push(item)
+        else if (item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'number') ids.push((item as { id: number }).id)
+      }
+      next = response.next_href ? this.transport.rewriteHref(response.next_href) : null
+      if (!next) break
+    }
+    return ids
+  }
+
+  async followingIds(userId: number): Promise<number[]> {
+    return this.collectIds(`/users/${userId}/followings`)
+  }
+
+  async repostIds(): Promise<number[]> {
+    try {
+      return await this.collectIds('/me/track_reposts/ids')
+    } catch {
+      return this.collectIds('/me/track_reposts')
+    }
+  }
+
+  private async writeWithVerbFallback(verbs: readonly string[], path: string, body?: unknown): Promise<void> {
+    let last: unknown = null
+    for (const verb of verbs) {
+      try {
+        await this.authed<unknown>(verb, path, {}, body)
+        return
+      } catch (error) {
+        last = error
+        const status = error instanceof ApiError ? error.status : 0
+        if (status !== 404 && status !== 405 && status !== 422) throw error
+      }
+    }
+    throw last instanceof Error ? last : new Error('la petición no se pudo completar')
+  }
+
+  async setFollowing(userId: number, following: boolean): Promise<void> {
+    if (!following) {
+      try {
+        await this.authed<unknown>('DELETE', `/me/followings/${userId}`)
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return
+        throw error
+      }
+      return
+    }
+    await this.writeWithVerbFallback(['PUT', 'POST'], `/me/followings/${userId}`)
+  }
+
+  async setRepost(trackId: number, reposted: boolean): Promise<void> {
+    if (!reposted) {
+      try {
+        await this.authed<unknown>('DELETE', `/me/track_reposts/${trackId}`)
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return
+        throw error
+      }
+      return
+    }
+    await this.writeWithVerbFallback(['PUT', 'POST'], `/me/track_reposts/${trackId}`)
+  }
+
+  async createPlaylist(title: string, trackIds: number[], isPublic = false): Promise<Playlist> {
+    const ids = uniqueIds(trackIds)
+    const payload = {
+      playlist: {
+        title,
+        sharing: isPublic ? 'public' : 'private',
+        tracks: ids.map((id) => ({ id })),
+      },
+    }
+    return this.authed<Playlist>('POST', '/playlists', {}, payload)
+  }
+
+  async setPlaylistTracks(playlistId: number, trackIds: number[]): Promise<void> {
+    const ids = uniqueIds(trackIds)
+    try {
+      await this.authed<unknown>('PUT', `/playlists/${playlistId}`, {}, { playlist: { tracks: ids.map((id) => ({ id })) } })
+    } catch (error) {
+      const status = error instanceof ApiError ? error.status : 0
+      if (status !== 400 && status !== 422) throw error
+      await this.authed<unknown>('PUT', `/playlists/${playlistId}`, {}, { playlist: { tracks: ids } })
+    }
+  }
+
+  async playlistTrackIds(playlistId: number): Promise<number[]> {
+    const playlist = await this.authed<Playlist>('GET', `/playlists/${playlistId}`)
+    const entries = Array.isArray(playlist.tracks) ? playlist.tracks : []
+    return entries.map((track) => track.id).filter((id): id is number => typeof id === 'number')
   }
 
   async streamUrl(track: Track, preferred: StreamProtocol = 'progressive'): Promise<StreamTarget | null> {
-    const transcodings = track.media?.transcodings ?? []
+    const transcodings = plainTranscodings(track)
     if (transcodings.length === 0) return null
     const byProtocol = (protocol: StreamProtocol) => transcodings.filter((t) => t.format.protocol === protocol)
     const ordered =
@@ -339,5 +601,9 @@ export class SoundCloudAPI {
 
   genres(): string[] {
     return [...GENRE_SLUGS]
+  }
+
+  searchGenres(): string[] {
+    return [...SEARCH_GENRES]
   }
 }

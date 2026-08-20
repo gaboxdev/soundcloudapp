@@ -140,3 +140,17 @@
     width: min(60vw, 200px);
   }
 }
+
+.resume-card {
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-genres {
+  padding-bottom: 6px;
+}
+
+.home-section .see-more {
+  background: none;
+  cursor: pointer;
+}

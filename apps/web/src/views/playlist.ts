@@ -1,46 +1,31 @@
 import type { Playlist, Track, User } from '@soundclear/api'
 import { isTrackStub } from '@soundclear/api'
 import { getAPI } from '../api'
-import { skeletonRows, trackRow } from '../components/trackrow'
+import { trackRow } from '../components/trackrow'
 import { link, register } from '../core/router'
+import { shareLink } from '../core/links'
 import { fmtCount, formatDate } from '../core/utils'
 import { player } from '../player/player'
 import { artEl } from '../ui/artwork'
 import { h, iconEl, svgIcon } from '../ui/el'
-import { toast, toastErr } from '../ui/toast'
+import { skPlaylistPage, skReveal, skTrackList } from '../ui/skeleton'
+import { toastErr } from '../ui/toast'
 import './playlist.css'
+import { t } from '../core/i18n.ts'
 
 const PAGE_SIZE = 40
 const SKELETON_ROWS = 6
 
 function errorView(message: string, onRetry?: () => void): HTMLElement {
   const view = h('div', { className: 'page-error' })
-  view.appendChild(h('h2', null, 'Ups'))
+  view.appendChild(h('h2', null, t('Ups')))
   view.appendChild(h('p', { className: 'text-dim' }, message))
   if (onRetry) {
-    view.appendChild(h('button', { className: 'btn btn-primary', onclick: onRetry }, 'Reintentar'))
+    view.appendChild(h('button', { className: 'btn btn-primary', onclick: onRetry }, t('Reintentar')))
   } else {
-    view.appendChild(h('a', { className: 'btn btn-primary', href: link('/') }, 'Volver al inicio'))
+    view.appendChild(h('a', { className: 'btn btn-primary', href: link('/') }, t('Volver al inicio')))
   }
   return view
-}
-
-function skeletonView(): HTMLElement {
-  const wrap = h('div', { className: 'playlist-skeleton' })
-  const header = h('div', { className: 'card card-pad playlist-header' })
-  header.appendChild(h('div', { className: 'skeleton sk-art-big' }))
-  const info = h('div', { className: 'playlist-info' })
-  info.appendChild(h('div', { className: 'skeleton sk-line', style: { width: '60%', height: '30px' } }))
-  info.appendChild(h('div', { className: 'skeleton sk-line', style: { width: '34%' } }))
-  info.appendChild(h('div', { className: 'skeleton sk-chips' }))
-  info.appendChild(h('div', { className: 'skeleton sk-line', style: { width: '50%' } }))
-  info.appendChild(h('div', { className: 'skeleton sk-actions' }))
-  header.appendChild(info)
-  wrap.appendChild(header)
-  const list = h('div', { className: 'track-list' })
-  for (const row of skeletonRows(8)) list.appendChild(row)
-  wrap.appendChild(list)
-  return wrap
 }
 
 function stillVisible(el: HTMLElement): boolean {
@@ -68,47 +53,18 @@ function releaseYear(p: Playlist): string {
   return String(date.getFullYear())
 }
 
-function fallbackCopy(text: string): boolean {
-  const area = document.createElement('textarea')
-  area.value = text
-  area.setAttribute('readonly', 'true')
-  area.style.position = 'fixed'
-  area.style.top = '-1000px'
-  area.style.opacity = '0'
-  document.body.appendChild(area)
-  area.select()
-  let copied = false
-  try {
-    copied = document.execCommand('copy')
-  } catch {
-    copied = false
-  }
-  area.remove()
-  return copied
-}
 
-async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-      await navigator.clipboard.writeText(text)
-      return true
-    }
-  } catch {
-    return fallbackCopy(text)
-  }
-  return fallbackCopy(text)
-}
 
 register('playlist', (route, container) => {
   container.classList.add('playlist-view')
   const id = Number(route.params.id)
   if (!Number.isInteger(id) || id <= 0) {
-    document.title = 'SoundClear'
-    container.appendChild(errorView('Este enlace no es válido'))
+    document.title = t('SoundClear')
+    container.appendChild(errorView(t('Este enlace no es válido')))
     return
   }
-  document.title = 'Cargando… — SoundClear'
-  container.appendChild(skeletonView())
+  document.title = t('Cargando… — SoundClear')
+  container.appendChild(skPlaylistPage())
   void load()
 
   async function load(): Promise<void> {
@@ -117,14 +73,15 @@ register('playlist', (route, container) => {
       playlist = await getAPI().playlist(id)
     } catch {
       if (!container.isConnected) return
-      document.title = 'SoundClear'
+      document.title = t('SoundClear')
       container.innerHTML = ''
-      container.appendChild(errorView('No se pudo cargar este contenido', () => void load()))
+      container.appendChild(errorView(t('No se pudo cargar este contenido'), () => void load()))
       return
     }
     if (!container.isConnected) return
     document.title = `${playlist.title} — SoundClear`
     container.innerHTML = ''
+    skReveal(container)
     renderPlaylist(playlist, container)
   }
 })
@@ -153,11 +110,11 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
   info.appendChild(
     owner
       ? h('a', { className: 'artist-link link-hover', href: link(`/user/${owner.id}`) }, owner.username)
-      : h('span', { className: 'artist-link text-faint' }, 'Artista desconocido'),
+      : h('span', { className: 'artist-link text-faint' }, t('Artista desconocido')),
   )
 
   const chips = h('div', { className: 'chip-row' })
-  if (isAlbum) chips.appendChild(h('span', { className: 'chip chip-static playlist-kind' }, 'Álbum'))
+  if (isAlbum) chips.appendChild(h('span', { className: 'chip chip-static playlist-kind' }, t('Álbum')))
   chips.appendChild(h('span', { className: 'chip chip-static' }, declaredCount === 1 ? '1 track' : `${declaredCount} tracks`))
   const durationChip = h('span', { className: 'chip chip-static' })
   durationChip.style.display = 'none'
@@ -200,7 +157,7 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
   }
 
   const actions = h('div', { className: 'playlist-actions' })
-  const playBtn = h('button', { className: 'btn btn-primary' })
+  const playBtn = h('button', { className: 'btn btn-primary', type: 'button', 'aria-label': t('Reproducir') })
   const playIcon = h('span')
   const playLabel = h('span')
   playBtn.appendChild(playIcon)
@@ -222,7 +179,7 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
       href: p.permalink_url,
       target: '_blank',
       rel: 'noopener noreferrer',
-      title: 'Abrir en SoundCloud',
+      title: t('Abrir en SoundCloud'),
     })
     openLink.innerHTML = `${svgIcon('external', 18)}<span>Abrir en SoundCloud</span>`
     actions.appendChild(openLink)
@@ -233,15 +190,13 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
   container.appendChild(header)
 
   async function share(): Promise<void> {
-    const copied = await copyToClipboard(p.permalink_url)
-    if (copied) toast('Enlace copiado al portapapeles', 'ok')
-    else toastErr('No se pudo copiar el enlace')
+    await shareLink(p.permalink_url, p.title)
   }
 
   if (declaredCount === 0 || entries.length === 0) {
     const empty = h('div', { className: 'empty-state' })
     empty.appendChild(iconEl('playlist', 44))
-    empty.appendChild(h('p', null, isAlbum ? 'Este álbum está vacío' : 'Esta playlist está vacía'))
+    empty.appendChild(h('p', null, isAlbum ? 'Este álbum está vacío' : t('Esta playlist está vacía')))
     container.appendChild(empty)
     renderPlayButton()
     playBtn.disabled = true
@@ -251,14 +206,13 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
 
   const list = h('div', { className: 'track-list playlist-tracks' })
   container.appendChild(list)
-  const pageSkeleton = h('div', { className: 'page-skeleton' })
-  for (const row of skeletonRows(SKELETON_ROWS)) pageSkeleton.appendChild(row)
+  const pageSkeleton = skTrackList(SKELETON_ROWS)
   pageSkeleton.style.display = 'none'
   container.appendChild(pageSkeleton)
 
   const loadError = h('div', { className: 'load-error' })
-  loadError.appendChild(h('p', { className: 'text-dim' }, 'No se pudieron cargar los tracks'))
-  const loadErrorBtn = h('button', { className: 'btn btn-ghost btn-sm' }, 'Reintentar')
+  loadError.appendChild(h('p', { className: 'text-dim' }, t('No se pudieron cargar los tracks')))
+  const loadErrorBtn = h('button', { className: 'btn btn-ghost btn-sm' }, t('Reintentar'))
   loadError.appendChild(loadErrorBtn)
   loadError.style.display = 'none'
   container.appendChild(loadError)
@@ -281,7 +235,7 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
     note.style.display = ''
     note.textContent =
       unavailable.size === 1
-        ? '1 track ya no está disponible en SoundCloud'
+        ? t('1 track ya no está disponible en SoundCloud')
         : `${unavailable.size} tracks ya no están disponibles en SoundCloud`
   }
 
@@ -387,7 +341,7 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
     try {
       return await ensureAll()
     } catch {
-      toastErr('No se pudieron cargar todos los tracks')
+      toastErr(t('No se pudieron cargar todos los tracks'))
       return orderedTracks()
     }
   }
@@ -399,7 +353,7 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
     setStarting(false)
     if (!container.isConnected) return
     if (queue.length === 0) {
-      toastErr('No hay tracks disponibles')
+      toastErr(t('No hay tracks disponibles'))
       return
     }
     const index = queue.findIndex((t) => t.id === trackId)
@@ -413,7 +367,7 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
     setStarting(false)
     if (!container.isConnected) return
     if (queue.length === 0) {
-      toastErr('No hay tracks disponibles')
+      toastErr(t('No hay tracks disponibles'))
       return
     }
     if (!player.store.get().shuffle) player.toggleShuffle()
@@ -430,7 +384,7 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
   function renderPlayButton(): void {
     const playing = isPlayingThis()
     playIcon.innerHTML = svgIcon(starting ? 'clock' : playing ? 'pause' : 'play', 18)
-    playLabel.textContent = starting ? 'Cargando…' : playing ? 'Pausar' : 'Reproducir'
+    playLabel.textContent = starting ? 'Cargando…' : playing ? 'Pausar' : t('Reproducir')
   }
 
   playBtn.addEventListener('click', () => {

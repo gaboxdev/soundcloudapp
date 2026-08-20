@@ -7,12 +7,25 @@ import { getAPI } from '../api'
 import { avatarEl } from '../ui/artwork'
 import { h, svgIcon } from '../ui/el'
 import { appLogo } from '../ui/logo'
+import { skCircle } from '../ui/skeleton'
+import { openPalette } from './palette'
 import '../views/views.css'
+import { t } from '../core/i18n.ts'
 
-const NAV_ITEMS = [
+interface NavItem {
+  path: string
+  label: string
+  icon: string
+  desktopOnly?: boolean
+}
+
+const NAV_ITEMS: NavItem[] = [
   { path: '/', label: 'Inicio', icon: 'home' },
+  { path: '/feed', label: 'Feed', icon: 'user', desktopOnly: true },
   { path: '/charts', label: 'Charts', icon: 'chart' },
+  { path: '/explore', label: 'Explorar', icon: 'radio' },
   { path: '/likes', label: 'Favoritos', icon: 'heart' },
+  { path: '/now', label: 'Ahora', icon: 'disc' },
   { path: '/queue', label: 'Cola', icon: 'queue' },
 ]
 
@@ -25,7 +38,10 @@ function setActiveNav(): void {
   const hash = window.location.hash.replace(/^#/, '') || '/'
   const active = hash === '/' ? '/' : `/${hash.split('/')[1].split('?')[0]}`
   headerEl.querySelectorAll<HTMLElement>('.nav-item').forEach((item) => {
-    item.classList.toggle('active', item.dataset.path === active)
+    const on = item.dataset.path === active
+    item.classList.toggle('active', on)
+    if (on) item.setAttribute('aria-current', 'page')
+    else item.removeAttribute('aria-current')
   })
 }
 
@@ -36,20 +52,20 @@ export function renderHeader(): HTMLElement {
   headerEl = header
 
   const brand = h('div', { className: 'titlebar-brand' })
-  if (desktop) brand.title = 'Arrastra para mover la ventana · doble clic para maximizar'
-  const logo = desktop
-    ? h('div', { className: 'logo' })
-    : h('a', { className: 'logo', href: '#/', title: 'SoundClear — inicio' })
-  logo.innerHTML = appLogo(28)
-  logo.appendChild(h('span', { className: 'logo-name' }, 'SoundClear'))
+  if (desktop) brand.title = t('Arrastra para mover la ventana · doble clic para maximizar')
+  const logo = h('a', { className: 'logo', href: '#/', title: t('SoundClear — ir al inicio'), 'aria-label': t('SoundClear — ir al inicio') })
+  if (desktop) logo.setAttribute('data-tauri-drag-region', 'false')
+  const logoMark = h('span', { className: 'logo-mark' })
+  logoMark.innerHTML = appLogo(28)
+  logo.append(logoMark, h('span', { className: 'logo-name' }, t('SoundClear')))
   brand.appendChild(logo)
   header.appendChild(brand)
 
   const historyNav = h('div', { className: 'history-nav' })
-  const backBtn = h('button', { className: 'icon-btn', title: 'Atrás', 'aria-label': 'Atrás' })
+  const backBtn = h('button', { className: 'icon-btn', title: t('Atrás'), 'aria-label': t('Atrás') })
   backBtn.innerHTML = svgIcon('back', 18)
   backBtn.addEventListener('click', () => window.history.back())
-  const forwardBtn = h('button', { className: 'icon-btn', title: 'Adelante', 'aria-label': 'Adelante' })
+  const forwardBtn = h('button', { className: 'icon-btn', title: t('Adelante'), 'aria-label': t('Adelante') })
   forwardBtn.innerHTML = svgIcon('forward', 18)
   forwardBtn.addEventListener('click', () => window.history.forward())
   historyNav.append(backBtn, forwardBtn)
@@ -57,14 +73,15 @@ export function renderHeader(): HTMLElement {
 
   const nav = h('nav', { className: 'nav' })
   for (const item of NAV_ITEMS) {
+    if (item.desktopOnly && !desktop) continue
     const btn = h('a', {
       className: 'nav-item',
       dataset: { path: item.path },
       href: `#${item.path}`,
-      title: item.label,
+      title: t(item.label),
     })
     btn.innerHTML = svgIcon(item.icon, 16)
-    btn.appendChild(h('span', { className: 'nav-label' }, item.label))
+    btn.appendChild(h('span', { className: 'nav-label' }, t(item.label)))
     nav.appendChild(btn)
   }
   header.appendChild(nav)
@@ -75,10 +92,10 @@ export function renderHeader(): HTMLElement {
   searchBox.innerHTML = svgIcon('search', 16)
   const input = h('input', {
     type: 'text',
-    placeholder: 'Busca tracks, artistas, playlists…',
+    placeholder: t('Busca tracks, artistas, playlists…'),
     autocomplete: 'off',
     spellcheck: 'false',
-    'aria-label': 'Buscar en SoundCloud',
+    'aria-label': t('Buscar en SoundCloud'),
   }) as HTMLInputElement
   searchBox.appendChild(input)
   const suggestions = h('div', { className: 'suggest-box' })
@@ -169,27 +186,50 @@ export function renderHeader(): HTMLElement {
     if (!searchWrap.contains(event.target as Node)) closeSuggestions()
   })
 
-  const accountLink = h('a', { className: 'header-account', href: '#/settings', title: 'Tu cuenta' })
+  const paletteBtn = h('button', {
+    className: 'icon-btn palette-btn',
+    type: 'button',
+    title: t('Paleta de comandos (⌘K)'),
+    'aria-label': t('Abrir la paleta de comandos'),
+  })
+  paletteBtn.innerHTML = svgIcon('command', 17)
+  paletteBtn.addEventListener('click', () => openPalette(input.value.trim()))
+  header.appendChild(paletteBtn)
+
+  const settingsBtn = h('a', { className: 'icon-btn', href: '#/settings', title: t('Ajustes'), 'aria-label': t('Ajustes') })
+  settingsBtn.innerHTML = svgIcon('settings', 19)
+  header.appendChild(settingsBtn)
+
+  const accountLink = h('a', {
+    className: 'header-account',
+    href: '#/settings',
+    title: t('Tu cuenta'),
+    'aria-label': t('Tu cuenta'),
+  })
   header.appendChild(accountLink)
 
   const renderAccount = (state: AccountState): void => {
     accountLink.replaceChildren()
     if (state.status !== 'ready' || !state.user) {
+      accountLink.classList.remove('has-photo')
       accountLink.setAttribute('href', '#/settings')
-      accountLink.title = state.status === 'unknown' ? 'Comprobando sesión…' : 'Inicia sesión'
+      accountLink.title = state.status === 'unknown' ? 'Comprobando sesión…' : t('Inicia sesión')
+      accountLink.setAttribute('aria-label', accountLink.title)
+      if (state.status === 'unknown') {
+        accountLink.appendChild(skCircle(30))
+        return
+      }
       const placeholder = h('span', { className: 'account-placeholder' })
       placeholder.innerHTML = svgIcon('user', 16)
       accountLink.appendChild(placeholder)
       return
     }
-    accountLink.setAttribute('href', '#/likes')
-    accountLink.title = `${state.user.username} — tus favoritos`
-    accountLink.appendChild(avatarEl(state.user.avatar_url, state.user.username, 30))
+    accountLink.classList.add('has-photo')
+    accountLink.setAttribute('href', `#/user/${state.user.id}`)
+    accountLink.title = `${state.user.username} — tu perfil`
+    accountLink.setAttribute('aria-label', accountLink.title)
+    accountLink.appendChild(avatarEl(state.user.avatar_url, state.user.username, 32))
   }
-
-  const settingsBtn = h('a', { className: 'icon-btn', href: '#/settings', title: 'Ajustes' })
-  settingsBtn.innerHTML = svgIcon('settings', 19)
-  header.appendChild(settingsBtn)
 
   const syncSearchInput = (): void => {
     const route = currentRoute()

@@ -8,8 +8,15 @@ use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use regex::Regex;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::TrayIconBuilder;
 use tauri::webview::{NewWindowFeatures, NewWindowResponse, PageLoadEvent};
-use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, State, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, Wry,
+};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_notification::NotificationExt;
 use tokio::sync::oneshot;
 use url::Url;
 
@@ -17,6 +24,12 @@ const CLIENT_ID_TTL: Duration = Duration::from_secs(20 * 60);
 const BRIDGE_LABEL: &str = "sl-bridge";
 const BRIDGE_BASE_URL: &str = "https://soundcloud.com/robots.txt";
 const LOGIN_LABEL: &str = "sl-login";
+const MAIN_LABEL: &str = "main";
+const MINI_LABEL: &str = "mini";
+const TRAY_ID: &str = "sl-tray";
+const MINI_WIDTH: f64 = 360.0;
+const MINI_HEIGHT: f64 = 160.0;
+const MINI_MARGIN: f64 = 24.0;
 const POPUP_PREFIX: &str = "sl-popup";
 const LOGIN_URL: &str = "https://soundcloud.com/signin";
 const LOGOUT_URL: &str = "https://soundcloud.com/logout";
@@ -419,6 +432,361 @@ async fn proxy_fetch(url: String, state: State<'_, ClientIdState>) -> Result<Str
         .map_err(|error| format!("leer respuesta: {error}"))
 }
 
+struct NativeState {
+    shortcuts: Mutex<Vec<(String, String, bool)>>,
+    now_item: Mutex<Option<MenuItem<Wry>>>,
+}
+
+fn emit_command(app: &AppHandle, command: &str) {
+    debug_log(&format!("nativo: comando {command}"));
+    let _ = app.emit("sl:cmd", command);
+}
+
+fn show_main(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(MAIN_LABEL) {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+        return;
+    }
+    let Some(config) = app.config().app.windows.first().cloned() else {
+        debug_log("ventana principal: sin configuración para recrearla");
+        return;
+    };
+    match WebviewWindowBuilder::from_config(app, &config).and_then(|builder| builder.build()) {
+        Ok(window) => {
+            debug_log("ventana principal: recreada desde la bandeja");
+            let _ = window.set_focus();
+            apply_window_glass(app);
+        }
+        Err(error) => debug_log(&format!("ventana principal: no se pudo recrear ({error})")),
+    }
+}
+
+fn mini_slot(app: &AppHandle) -> Option<(f64, f64)> {
+    let monitor = app
+        .get_webview_window(MAIN_LABEL)
+        .and_then(|main| main.current_monitor().ok().flatten())
+        .or_else(|| app.primary_monitor().ok().flatten())?;
+    let scale = monitor.scale_factor();
+    let area: LogicalSize<f64> = monitor.size().to_logical(scale);
+    let origin: LogicalPosition<f64> = monitor.position().to_logical(scale);
+    let x = origin.x + area.width - MINI_WIDTH - MINI_MARGIN;
+    let y = origin.y + area.height - MINI_HEIGHT - MINI_MARGIN * 3.0;
+    debug_log(&format!(
+        "mini: monitor {}x{} lógicos en ({}, {}) escala {scale} -> mini en ({x}, {y})",
+        area.width, area.height, origin.x, origin.y
+    ));
+    Some((x, y))
+}
+
+fn open_mini(app: &AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(MINI_LABEL) {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+    let slot = mini_slot(app);
+    let mut builder = WebviewWindowBuilder::new(app, MINI_LABEL, WebviewUrl::App("index.html".into()))
+        .title("SoundClear mini")
+        .inner_size(MINI_WIDTH, MINI_HEIGHT)
+        .min_inner_size(320.0, 150.0)
+        .resizable(false)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .shadow(true)
+        .visible(false);
+    if let Some((x, y)) = slot {
+        builder = builder.position(x, y);
+    }
+    let window = builder.build().map_err(|error| error.to_string())?;
+    if window.set_content_protected(true).is_err() {
+        debug_log("mini: no se pudo activar la protección de contenido");
+    } else {
+        debug_log("mini: protección de contenido activa (fuera de capturas)");
+    }
+    let _ = window.show();
+    let _ = window.set_focus();
+    debug_log(&format!(
+        "mini: ventana creada en {:?}",
+        window.outer_position().ok()
+    ));
+    Ok(())
+}
+
+fn close_mini(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(MINI_LABEL) {
+        let _ = window.close();
+        debug_log("mini: ventana cerrada");
+    }
+}
+
+#[tauri::command]
+fn mini_window(app: AppHandle, show: bool) -> Result<bool, String> {
+    if show {
+        open_mini(&app)?;
+        return Ok(true);
+    }
+    close_mini(&app);
+    Ok(false)
+}
+
+#[tauri::command]
+fn toggle_mini(app: AppHandle) -> Result<bool, String> {
+    if app.get_webview_window(MINI_LABEL).is_some() {
+        close_mini(&app);
+        return Ok(false);
+    }
+    open_mini(&app)?;
+    Ok(true)
+}
+
+#[tauri::command]
+fn notify_track(app: AppHandle, title: String, body: String) -> Result<(), String> {
+    app.notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn set_now_playing(app: AppHandle, state: State<'_, NativeState>, text: String) -> Result<(), String> {
+    let label = if text.trim().is_empty() {
+        "Nada suena".to_string()
+    } else {
+        text.chars().take(64).collect::<String>()
+    };
+    if let Some(item) = lock_or_recover(&state.now_item).as_ref() {
+        let _ = item.set_text(&label);
+    }
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let _ = tray.set_tooltip(Some(&label));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn shortcut_status(state: State<'_, NativeState>) -> Vec<(String, String, bool)> {
+    lock_or_recover(&state.shortcuts).clone()
+}
+
+fn register_shortcuts(app: &AppHandle) {
+    let combo = Modifiers::SUPER | Modifiers::ALT;
+    let entries: Vec<(&str, Shortcut, &'static str)> = vec![
+        ("Tecla de play/pausa", Shortcut::new(None, Code::MediaPlayPause), "toggle"),
+        ("Tecla de siguiente", Shortcut::new(None, Code::MediaTrackNext), "next"),
+        ("Tecla de anterior", Shortcut::new(None, Code::MediaTrackPrevious), "prev"),
+        ("⌘⌥Espacio", Shortcut::new(Some(combo), Code::Space), "toggle"),
+        ("⌘⌥→", Shortcut::new(Some(combo), Code::ArrowRight), "next"),
+        ("⌘⌥←", Shortcut::new(Some(combo), Code::ArrowLeft), "prev"),
+        ("⌘⌥F", Shortcut::new(Some(combo), Code::KeyF), "like"),
+        ("⌘⌥M", Shortcut::new(Some(combo), Code::KeyM), "mini"),
+    ];
+    let mut status: Vec<(String, String, bool)> = Vec::new();
+    for (label, shortcut, command) in entries {
+        let action = command.to_string();
+        let result = app
+            .global_shortcut()
+            .on_shortcut(shortcut, move |handle, _shortcut, event| {
+                if event.state() != ShortcutState::Pressed {
+                    return;
+                }
+                if action == "mini" {
+                    if let Err(error) = toggle_mini(handle.clone()) {
+                        debug_log(&format!("mini: error {error}"));
+                    }
+                    return;
+                }
+                emit_command(handle, &action);
+            });
+        let ok = result.is_ok();
+        if let Err(error) = result {
+            debug_log(&format!("atajo {label}: no se pudo registrar ({error})"));
+        }
+        status.push((label.to_string(), command.to_string(), ok));
+    }
+    let registered = status.iter().filter(|entry| entry.2).count();
+    debug_log(&format!(
+        "atajos globales: {registered}/{} registrados",
+        status.len()
+    ));
+    *lock_or_recover(&app.state::<NativeState>().shortcuts) = status;
+}
+
+fn build_tray(app: &AppHandle) -> Result<(), String> {
+    let now = MenuItem::with_id(app, "now", "Nada suena", false, None::<&str>)
+        .map_err(|error| error.to_string())?;
+    let toggle = MenuItem::with_id(app, "toggle", "Reproducir o pausar", true, Some("Cmd+Alt+Space"))
+        .map_err(|error| error.to_string())?;
+    let prev = MenuItem::with_id(app, "prev", "Anterior", true, None::<&str>)
+        .map_err(|error| error.to_string())?;
+    let next = MenuItem::with_id(app, "next", "Siguiente", true, None::<&str>)
+        .map_err(|error| error.to_string())?;
+    let mini = MenuItem::with_id(app, "mini", "Mini reproductor", true, None::<&str>)
+        .map_err(|error| error.to_string())?;
+    let show = MenuItem::with_id(app, "show", "Mostrar SoundClear", true, None::<&str>)
+        .map_err(|error| error.to_string())?;
+    let quit = MenuItem::with_id(app, "quit", "Salir", true, None::<&str>)
+        .map_err(|error| error.to_string())?;
+    let separator_one = PredefinedMenuItem::separator(app).map_err(|error| error.to_string())?;
+    let separator_two = PredefinedMenuItem::separator(app).map_err(|error| error.to_string())?;
+    let separator_three = PredefinedMenuItem::separator(app).map_err(|error| error.to_string())?;
+    let menu = Menu::with_items(
+        app,
+        &[
+            &now,
+            &separator_one,
+            &toggle,
+            &prev,
+            &next,
+            &separator_two,
+            &mini,
+            &show,
+            &separator_three,
+            &quit,
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+
+    let mut builder = TrayIconBuilder::with_id(TRAY_ID)
+        .tooltip("SoundClear")
+        .menu(&menu)
+        .show_menu_on_left_click(true)
+        .on_menu_event(|handle, event| match event.id().as_ref() {
+            "toggle" | "prev" | "next" => emit_command(handle, event.id().as_ref()),
+            "mini" => {
+                if let Err(error) = toggle_mini(handle.clone()) {
+                    debug_log(&format!("mini: error {error}"));
+                }
+            }
+            "show" => show_main(handle),
+            "quit" => handle.exit(0),
+            _ => {}
+        });
+    if let Some(icon) = app.default_window_icon().cloned() {
+        builder = builder.icon(icon).icon_as_template(true);
+    }
+    builder.build(app).map_err(|error| error.to_string())?;
+    *lock_or_recover(&app.state::<NativeState>().now_item) = Some(now);
+    debug_log("bandeja: icono creado");
+    Ok(())
+}
+
+fn allowed_download_host(url: &str) -> bool {
+    match Url::parse(url) {
+        Ok(parsed) => {
+            if parsed.scheme() != "https" {
+                return false;
+            }
+            match parsed.host_str() {
+                Some(host) => {
+                    host == "soundcloud.com"
+                        || host.ends_with(".soundcloud.com")
+                        || host.ends_with(".sndcdn.com")
+                        || host.ends_with(".soundcloud.cloud")
+                }
+                None => false,
+            }
+        }
+        Err(_) => false,
+    }
+}
+
+fn safe_file_stem(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '-',
+            c if c.is_control() => ' ',
+            c => c,
+        })
+        .collect();
+    let trimmed = cleaned.trim().trim_matches('.').trim();
+    let limited: String = trimmed.chars().take(80).collect();
+    if limited.is_empty() {
+        "track".to_string()
+    } else {
+        limited.trim().to_string()
+    }
+}
+
+fn extension_from(url: &str, disposition: Option<&str>) -> String {
+    let candidates = ["mp3", "wav", "aiff", "aif", "flac", "m4a", "ogg", "opus"];
+    if let Some(value) = disposition {
+        let lower = value.to_ascii_lowercase();
+        for candidate in candidates {
+            if lower.contains(&format!(".{candidate}")) {
+                return candidate.to_string();
+            }
+        }
+    }
+    if let Ok(parsed) = Url::parse(url) {
+        let path = parsed.path().to_ascii_lowercase();
+        for candidate in candidates {
+            if path.ends_with(&format!(".{candidate}")) {
+                return candidate.to_string();
+            }
+        }
+    }
+    "mp3".to_string()
+}
+
+#[tauri::command]
+async fn download_to_music(app: AppHandle, url: String, name: String) -> Result<String, String> {
+    if !allowed_download_host(&url) {
+        debug_log("descarga rechazada: host no permitido");
+        return Err("host no permitido para descargas".to_string());
+    }
+    let base = app
+        .path()
+        .audio_dir()
+        .or_else(|_| app.path().download_dir())
+        .map_err(|error| format!("carpeta de destino: {error}"))?;
+    let folder = base.join("SoundClear");
+    std::fs::create_dir_all(&folder).map_err(|error| format!("crear carpeta: {error}"))?;
+
+    let response = HTTP_CLIENT
+        .get(&url)
+        .send()
+        .await
+        .map_err(|error| format!("descarga: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!("upstream HTTP {}", response.status().as_u16()));
+    }
+    let disposition = response
+        .headers()
+        .get(reqwest::header::CONTENT_DISPOSITION)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.to_string());
+    let final_url = response.url().to_string();
+    let extension = extension_from(&final_url, disposition.as_deref());
+    let stem = safe_file_stem(&name);
+    let mut path = folder.join(format!("{stem}.{extension}"));
+    let mut attempt = 1;
+    while path.exists() && attempt < 100 {
+        path = folder.join(format!("{stem} ({attempt}).{extension}"));
+        attempt += 1;
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| format!("leer descarga: {error}"))?;
+    if bytes.is_empty() {
+        return Err("la descarga llegó vacía".to_string());
+    }
+    std::fs::write(&path, &bytes).map_err(|error| format!("escribir archivo: {error}"))?;
+    debug_log(&format!(
+        "descarga guardada ({} bytes) en {}",
+        bytes.len(),
+        path.display()
+    ));
+    Ok(path.to_string_lossy().to_string())
+}
+
 const LOGIN_HINT_SCRIPT: &str = r#"(function(){
 var HOSTS=["accounts.google.com","appleid.apple.com"];
 var KEY="sl_login_hint_dismissed";
@@ -807,6 +1175,18 @@ pub fn run() {
     tauri::Builder::default()
         .manage(ClientIdState(Mutex::new(None)))
         .manage(bridge_state)
+        .manage(NativeState {
+            shortcuts: Mutex::new(Vec::new()),
+            now_item: Mutex::new(None),
+        })
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_denylist(&[BRIDGE_LABEL, LOGIN_LABEL, MINI_LABEL])
+                .build(),
+        )
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .register_uri_scheme_protocol(RESULT_SCHEME, move |context, request| {
             if request.method() == "OPTIONS" {
                 return cors_response(204);
@@ -894,8 +1274,54 @@ pub fn run() {
 
             apply_window_glass(app.handle());
 
+            register_shortcuts(app.handle());
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let handle = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    for url in event.urls() {
+                        debug_log(&format!("enlace profundo: {url}"));
+                        let _ = handle.emit("sl:link", url.to_string());
+                        show_main(&handle);
+                    }
+                });
+                if let Err(error) = app.deep_link().register_all() {
+                    debug_log(&format!("enlace profundo: no se pudo registrar ({error})"));
+                } else {
+                    debug_log("enlace profundo: esquema soundclear registrado");
+                }
+            }
+            if let Err(error) = build_tray(app.handle()) {
+                debug_log(&format!("bandeja: error {error}"));
+            }
+
             if std::env::var("SOUNDCLEAR_SELFTEST").is_ok() {
                 debug_log("SELFTEST: comenzando");
+                for (label, command, ok) in lock_or_recover(&app.state::<NativeState>().shortcuts).iter() {
+                    debug_log(&format!(
+                        "SELFTEST: atajo {label} -> {command}: {}",
+                        if *ok { "registrado" } else { "FALLO" }
+                    ));
+                }
+                if app.tray_by_id(TRAY_ID).is_some() {
+                    debug_log("SELFTEST: bandeja presente");
+                } else {
+                    debug_log("SELFTEST: bandeja AUSENTE");
+                }
+                match open_mini(app.handle()) {
+                    Ok(()) => {
+                        std::thread::sleep(Duration::from_millis(700));
+                        if let Some(mini) = app.get_webview_window(MINI_LABEL) {
+                            debug_log(&format!(
+                                "SELFTEST: mini visible={:?} tamaño={:?} posición={:?}",
+                                mini.is_visible().unwrap_or(false),
+                                mini.outer_size().ok(),
+                                mini.outer_position().ok()
+                            ));
+                        }
+                    }
+                    Err(error) => debug_log(&format!("SELFTEST: mini error {error}")),
+                }
                 let app_for_test = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(Duration::from_secs(2)).await;
@@ -930,6 +1356,9 @@ pub fn run() {
                         debug_log(&format!("SELFTEST: login_window error {error}"));
                     }
                     debug_log("SELFTEST: ventana de login abierta");
+                    tokio::time::sleep(Duration::from_millis(1200)).await;
+                    emit_command(&app_for_test, "toggle");
+                    debug_log("SELFTEST: comando emitido a la app");
                     tokio::time::sleep(Duration::from_secs(6)).await;
                     if let Some(login_win) = app_for_test.get_webview_window(LOGIN_LABEL) {
                         let probe_base = app_base_url(&app_for_test);
@@ -1000,6 +1429,12 @@ pub fn run() {
             logout_window,
             close_login_windows,
             log_debug,
+            download_to_music,
+            mini_window,
+            toggle_mini,
+            notify_track,
+            set_now_playing,
+            shortcut_status,
         ])
         .run(tauri::generate_context!())
         .expect("error al ejecutar SoundClear");
