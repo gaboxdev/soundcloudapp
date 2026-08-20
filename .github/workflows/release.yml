@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - run: npm ci
+
+      - run: npm run typecheck
+      - run: npm test
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: SoundClear ${{ github.ref_name }}
+          releaseDraft: true
+          args: --target universal-apple-darwin
+          releaseBody: |
+            Binario universal para macOS (Apple Silicon e Intel).
+
+            **El binario no está firmado ni notarizado.** macOS lo va a bloquear la primera vez:
+            abre el `.app` con clic derecho › **Abrir**, o quita la cuarentena con
+            `xattr -dr com.apple.quarantine /Applications/SoundClear.app`.
+
+            Proyecto independiente, sin afiliación con SoundCloud.

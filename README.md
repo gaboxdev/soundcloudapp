@@ -39,10 +39,33 @@ Un regalo para la comunidad de SoundCloud. MIT, para quien lo quiera, como se hi
 | ❤️ **Favoritos e historial** | Tus favoritos sincronizados con tu cuenta de SoundCloud; historial local |
 | ⚡ **Atajos** | `Espacio` play/pausa · `←/→` ±5 s (`⇧` ±15 s) · `↑/↓` volumen · `N/P` · `M` silenciar · `F` favorito · `X` radio · `A` ahora suena · `/` buscar · `?` ayuda. Soporta Media Session (teclas multimedia del sistema) |
 | ⏱️ **Velocidad y temporizador** | 0.75×–2× y «pausar en 15/30/60/120 min» |
-| 🌗 **Apariencia** | Oscuro / claro / sistema, cinco acentos con contraste verificado, tres niveles de cristal, densidad cómoda o compacta, barra superior fija / al desplazar / oculta |
+| 🌗 **Apariencia** | Oscuro / claro / sistema, seis acentos con contraste verificado más un tono libre a tu gusto, tres niveles de cristal, densidad cómoda o compacta, barra superior fija / al desplazar / oculta |
 | 📱 **PWA** | Instalable, service worker con caché de arte y waveforms. Se puede usar entera en modo invitado; la sesión con tu cuenta solo existe en escritorio (ver abajo) |
 | 🖥️ **Escritorio** | Tauri 2: binario nativo de pocos MB, sin Electron |
 | 🎨 **Skeletons + blur-up** | La UI nunca se siente vacía: carga instantánea, imágenes lazy |
+
+## 📦 Instalar
+
+**Todavía no hay binarios publicados.** El primer release de macOS saldrá de [`.github/workflows/release.yml`](./.github/workflows/release.yml) al etiquetar una versión; hasta entonces, compilarlo son tres comandos:
+
+```bash
+git clone https://github.com/gaboxdev/soundcloudapp.git
+cd soundcloudapp
+npm install
+npm run build -w apps/desktop     # requiere Rust estable
+```
+
+El `.app` queda en `apps/desktop/src-tauri/target/release/bundle/macos/`. Arrástralo a Aplicaciones.
+
+Cuando haya binarios, ojo con esto: **no van firmados ni notarizados** (la firma de Apple cuesta 99 $/año y este proyecto no cobra nada). macOS los bloqueará la primera vez — ábrelos con clic derecho › **Abrir**, o quita la cuarentena:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/SoundClear.app
+```
+
+Windows y Linux aún no tienen build; Tauri los soporta, así que es cuestión de que alguien lo pruebe (está en el roadmap).
+
+Si solo quieres verla funcionando sin compilar nada, `npm run dev` te da la versión web en modo invitado.
 
 ## 🚀 Empezar
 
@@ -61,11 +84,13 @@ La API de SoundCloud bloquea CORS desde cualquier origen que no sea `soundcloud.
 
 El audio y los waveforms se sirven directo desde los CDNs de SoundCloud (`Access-Control-Allow-Origin: *`), sin pasar por el proxy.
 
-> **Importante**: SoundClear exige iniciar sesión para usarse, y la sesión con SoundCloud solo puede establecerse desde la app de escritorio (cookies de terceros + CORS lo impiden en el navegador). Por eso, hoy **el build web muestra la pantalla de acceso y no permite entrar**: sirve para desarrollo y para desplegar el proxy, pero la app de verdad es la de escritorio. Levantar esa restricción (modo invitado) está en el roadmap.
+> **Qué puedes hacer en el navegador**: la app funciona entera en **modo invitado** — buscar, explorar, escuchar, cola, radio, favoritos e historial guardados en ese navegador. Al abrir verás la pantalla de acceso con el botón **«Explorar sin cuenta»**; a partir de ahí no falta nada de la experiencia local.
+>
+> Lo que **solo** existe en la app de escritorio es la sesión con tu cuenta de SoundCloud (cookies de terceros + CORS lo impiden en el navegador) y todo lo que depende de ella: tu perfil, tus likes sincronizados, el feed, seguir, repostear y escribir en tus playlists.
 
 ### Cuenta e inicio de sesión (escritorio)
 
-Al abrir la app, **lo primero que verás es la pantalla de inicio de sesión**: para usar SoundClear hay que conectar tu cuenta de SoundCloud (así la app siempre está lista para ti y no pierdes tus likes). 
+Al abrir la app, **lo primero que verás es la pantalla de inicio de sesión**. Conectar tu cuenta es lo recomendable —así tus likes viajan contigo— pero no es obligatorio: **«Explorar sin cuenta»** entra directo en modo invitado, con los favoritos guardados solo en ese dispositivo. 
 
 SoundCloud cerró el registro de apps OAuth para nuevos desarrolladores, así que SoundClear se conecta con el **login nativo de SoundCloud**: la app abre una ventana con `soundcloud.com`, inicias sesión ahí (con tu cuenta, 2FA incluido) y la sesión queda guardada en la webview. Las peticiones autenticadas (`/me`, tus likes, quitar like) se hacen desde un webview oculto en el mismo origen que la API, donde el CORS de SoundCloud sí permite `soundcloud.com`.
 
@@ -77,7 +102,7 @@ Disponible en **Ajustes → Cuenta** y en **Favoritos → Tu cuenta**:
 
 **Sobre passkeys y botones sociales (Google/Apple)**: la webview del sistema en macOS no soporta passkeys (WebAuthn de plataforma) — es una limitación de WebKit, [issue abierta en Tauri](https://github.com/tauri-apps/tauri/issues/7926) desde 2023. Si al iniciar sesión con Google o Apple te pide passkey, elige **«Usar contraseña» / «Otras opciones»**: el login con email + contraseña (+ código 2FA) funciona perfectamente en la app. La ventana de login muestra un aviso automático en esas pantallas. En Windows (WebView2/Chromium) los passkeys sí funcionarán.
 
-La versión web navegador no puede guardar la sesión (cookies de terceros + CORS), por eso la pantalla de acceso te indica cómo obtener la app de escritorio.
+La versión de navegador no puede guardar la sesión (cookies de terceros + CORS): ahí la pantalla de acceso te ofrece el modo invitado y te indica cómo conseguir la app de escritorio.
 
 ## 🏗️ Arquitectura
 
@@ -107,22 +132,24 @@ Detalles técnicos en [AGENTS.md](./AGENTS.md).
 ## 🗺️ Roadmap
 
 - [x] Cuenta y sincronización de likes (resuelto con el login nativo en la webview, sin OAuth)
-- [ ] Modo invitado en la versión web (hoy la sesión es obligatoria y solo existe en escritorio)
+- [x] Modo invitado en la versión web («Explorar sin cuenta», favoritos locales)
 - [ ] Estaciones de radio (artist station)
 - [ ] Más tamaños de arte (CDN) y opción de calidad
 - [ ] Versión móvil nativa
 - [ ] Compilados para Windows/Linux
-- [ ] Soporte de idiomas (i18n)
+- [x] Soporte de idiomas (español e inglés, cambio en caliente)
 
 ¿Ideas? Abre un issue o un PR — este proyecto es tuyo también.
 
 ## 🤝 Contribuir
 
-1. Fork + branch (`feat/nombre`)
-2. `npm run typecheck` y `npm run build` pasan
+1. Fork + rama (`feat/nombre`)
+2. `npm run typecheck`, `npm test` y `npm run build` en verde
 3. PR con descripción clara — mira el [template](./.github/pull_request_template.md)
 
-Normas: sin comentarios en el código, UI en español, TS estricto, clases kebab-case, nada de frameworks.
+Normas: sin comentarios en el código, UI en español, TS estricto, clases kebab-case, nada de frameworks. Todo el detalle —convenciones, cómo añadir una vista, qué no se acepta— en [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+¿Encontraste un fallo de seguridad? No abras un issue: [SECURITY.md](./SECURITY.md) explica cómo reportarlo en privado.
 
 ## ⚖️ Legal
 
