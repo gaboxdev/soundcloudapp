@@ -32,7 +32,7 @@
   --radius-lg: 22px;
   --header-h: 60px;
 
-  --player-h: 92px;
+  --player-h: 104px;
   --player-gap: 12px;
 
   --solid: #16161c;
@@ -1171,7 +1171,7 @@ h4 {
   align-items: center;
   gap: 14px;
   height: 100%;
-  padding: 0 16px;
+  padding: 6px 20px;
   margin: 0 auto;
 }
 
@@ -1237,7 +1237,7 @@ h4 {
 .player-grid .progress-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .player-grid .time {
@@ -1260,7 +1260,7 @@ h4 {
 .player-grid .side {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   width: 250px;
   justify-content: flex-end;
   flex-shrink: 0;
@@ -1545,7 +1545,7 @@ html.gate-open body {
     max-width: none;
   }
   .player-grid {
-    padding: 0 10px;
+    padding: 6px 12px;
     gap: 8px;
   }
   .player-grid .now {
