@@ -74,7 +74,8 @@ Como el binario no va firmado, SmartScreen avisa la primera vez: **Más informac
 
 Dos diferencias reales frente a macOS: los atajos globales usan **Ctrl+Alt** en vez de ⌘⌥, y la
 ventana lleva la barra de título nativa de Windows además de la cabecera de la app (en macOS van
-fundidas). Linux sigue sin probar.
+fundidas). Linux se compila en CI desde ahora, pero sigue sin estar validado en un escritorio
+real: tratalo como experimental.
 
 Si solo quieres verla funcionando sin compilar nada, `npm run dev` te da la versión web en modo invitado.
 
@@ -148,7 +149,7 @@ Detalles técnicos en [AGENTS.md](./AGENTS.md).
 - [ ] Más tamaños de arte (CDN) y opción de calidad
 - [ ] Versión móvil nativa
 - [x] Flujo de compilados para macOS y Windows (publicación pendiente)
-- [ ] Compilados y validación para Linux
+- [~] Compilados para Linux en CI, sin validar todavía en un escritorio real
 - [x] Soporte de idiomas (español e inglés, cambio en caliente)
 
 ¿Ideas? Abre un issue o un PR — este proyecto es tuyo también.

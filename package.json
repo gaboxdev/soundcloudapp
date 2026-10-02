@@ -18,6 +18,7 @@
     "test": "node --import ./apps/web/test/runtime.ts --test \"apps/web/test/*.test.ts\" \"packages/soundcloud-api/test/*.test.ts\" \"proxy/test/*.test.ts\"",
     "probe": "node scripts/api-probe.mjs",
     "i18n": "node scripts/i18n-audit.mjs",
+    "css:audit": "node scripts/css-audit.mjs",
     "release:check": "node scripts/check-release.mjs"
   },
   "engines": {

@@ -126,7 +126,7 @@ export function renderPlayerBar(): HTMLElement {
   grid.appendChild(center)
 
   const side = h('div', { className: 'side' })
-  const likeBtn = h('button', { className: 'icon-btn', title: t('Favorito'), 'aria-label': t('Favorito') })
+  const likeBtn = h('button', { className: 'icon-btn like-btn', title: t('Favorito'), 'aria-label': t('Favorito') })
   likeBtn.innerHTML = svgIcon('heart', 18)
   const volumeBtn = h('button', { className: 'icon-btn', title: t('Silenciar'), 'aria-label': t('Silenciar') })
   volumeBtn.innerHTML = svgIcon('volume', 18)

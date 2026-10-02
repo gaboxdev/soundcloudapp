@@ -4,6 +4,15 @@ import { join } from 'node:path'
 const RAIZ = 'apps/web/src'
 const SALTAR = ['/dev/', '/test/', 'i18n.en.ts', 'i18n.ts']
 
+const LITERALES = [
+  'ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape', 'Tab',
+  'Home', 'End', 'Space', 'Backspace', 'Delete', 'PageUp', 'PageDown',
+  'NFD', 'NFC', 'NFKD', 'NFKD', 'SNIP', 'ALLOW', 'BLOCK',
+  'English', 'Español', 'Esc',
+]
+
+const ES_POR_DEFECTO = /^(me\(\) |IndexedDB )/
+
 function ficheros(dir) {
   const salida = []
   for (const entrada of readdirSync(dir)) {
@@ -30,6 +39,7 @@ for (const ruta of ficheros(RAIZ)) {
   for (const m of src.matchAll(/(?<![A-Za-z]|t\()'((?:[^'\\\n]|\\.)+)'/g)) {
     const valor = m[1]
     if (!esCandidato(valor)) continue
+    if (LITERALES.includes(valor) || ES_POR_DEFECTO.test(valor)) continue
     const antes = src.slice(Math.max(0, m.index - 40), m.index)
     if (/(className|class|dataset|id|role|type|href|src|icon|name|command|slug|key|event|selector|tag)\s*[:=]\s*$/.test(antes)) continue
     if (/from\s*$/.test(antes)) continue

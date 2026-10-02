@@ -24,6 +24,7 @@ jobs:
       - run: npm run build
       - run: npm run release:check
       - run: npm run i18n -- --estricto
+      - run: npm run css:audit -- --estricto
       - run: npm audit --audit-level=high
 
   worker:

@@ -1087,6 +1087,10 @@ h4 {
   color: var(--danger);
 }
 
+.toast-again {
+  animation: toast-in 0.24s var(--ease);
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;
@@ -2346,7 +2350,7 @@ html.modal-open body {
   pointer-events: none;
 }
 
-.app-player.idle .side .icon-btn[title='Favorito'] {
+.app-player.idle .side .icon-btn.like-btn {
   opacity: 0.4;
   pointer-events: none;
 }

@@ -204,7 +204,7 @@ fn query_of(url: &str) -> HashMap<String, String> {
 }
 
 fn validate_api_url(value: &str) -> Result<Url, String> {
-    let parsed = Url::parse(value).map_err(|_| "URL de API invÃ¡lida".to_string())?;
+    let parsed = Url::parse(value).map_err(|_| "URL de API inválida".to_string())?;
     let valid_port = parsed.port().map_or(true, |port| port == 443);
     if parsed.scheme() != "https"
         || parsed.host_str() != Some(API_HOST)
@@ -212,7 +212,7 @@ fn validate_api_url(value: &str) -> Result<Url, String> {
         || parsed.password().is_some()
         || !valid_port
     {
-        return Err("solo se permite https://api-v2.soundcloud.com sin credenciales ni puertos no estÃ¡ndar".to_string());
+        return Err("solo se permite https://api-v2.soundcloud.com sin credenciales ni puertos no estándar".to_string());
     }
     Ok(parsed)
 }
@@ -221,7 +221,7 @@ fn normalize_authed_method(method: &str) -> Result<String, String> {
     let normalized = method.to_ascii_uppercase();
     match normalized.as_str() {
         "GET" | "POST" | "PUT" | "DELETE" | "PATCH" => Ok(normalized),
-        _ => Err("mÃ©todo no permitido para solicitudes autenticadas".to_string()),
+        _ => Err("método no permitido para solicitudes autenticadas".to_string()),
     }
 }
 
@@ -855,7 +855,7 @@ fn allowed_download_url(url: &Url) -> bool {
 async fn download_response(mut url: Url) -> Result<reqwest::Response, String> {
     for _ in 0..=MAX_DOWNLOAD_REDIRECTS {
         if !allowed_download_url(&url) {
-            return Err("redirecciÃ³n de descarga a host no permitido".to_string());
+            return Err("redirección de descarga a host no permitido".to_string());
         }
         let response = HTTP_CLIENT
             .get(url.clone())
@@ -869,10 +869,10 @@ async fn download_response(mut url: Url) -> Result<reqwest::Response, String> {
             .headers()
             .get(reqwest::header::LOCATION)
             .and_then(|value| value.to_str().ok())
-            .ok_or_else(|| "redirecciÃ³n de descarga sin destino".to_string())?;
+            .ok_or_else(|| "redirección de descarga sin destino".to_string())?;
         url = url
             .join(location)
-            .map_err(|_| "destino de redirecciÃ³n de descarga invÃ¡lido".to_string())?;
+            .map_err(|_| "destino de redirección de descarga inválido".to_string())?;
     }
     Err("demasiadas redirecciones de descarga".to_string())
 }

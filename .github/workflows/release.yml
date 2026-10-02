@@ -74,6 +74,60 @@ jobs:
 
             Proyecto independiente, sin afiliación con SoundCloud.
 
+  linux:
+    needs: validate
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - name: Dependencias del sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            patchelf
+
+      - run: npm ci
+
+      - run: npm run typecheck
+      - run: npm test
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: SoundClear ${{ github.ref_name }}
+          releaseDraft: true
+          releaseBody: |
+            Linux x64 (`.AppImage` y `.deb`).
+
+            **El binario no está firmado.** Tu gestor de paquetes puede avisar: instala el
+            `.deb` con `sudo apt install ./soundclear_*.deb`. El `.AppImage` no necesita
+            instalación: dale permiso de ejecución y ábrelo.
+
+            En Wayland el cristal de la ventana depende del compositor; con GNOME en X11 o
+            con un compositor antiguo la ventana puede verse opaca.
+
+            Proyecto independiente, sin afiliación con SoundCloud.
+
   windows:
     needs: validate
     runs-on: windows-latest

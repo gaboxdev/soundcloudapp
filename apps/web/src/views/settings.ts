@@ -945,7 +945,9 @@ register('settings', (_route, container) => {
       } else {
         const res = await fetch('/sl-client-id')
         const data = (await res.json()) as { client_id?: string; refreshed?: boolean }
-        clientId = data.client_id ? `resuelto (${data.client_id.length} caracteres${data.refreshed ? ', recién renovado' : ''})` : `sin resolver (HTTP ${res.status})`
+        clientId = data.client_id
+          ? `resuelto (${data.client_id.length} caracteres${data.refreshed ? t(', recién renovado') : ''})`
+          : `sin resolver (HTTP ${res.status})`
       }
     } catch {
       clientId = 'sin resolver (error de red)'
