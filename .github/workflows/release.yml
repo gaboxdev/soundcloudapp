@@ -3,6 +3,16 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Etiqueta a publicar (v0.1.0)'
+        required: true
+
+# Publicar dos veces la misma etiqueta no debe lanzar dos veces los tres builds.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -21,7 +31,7 @@ jobs:
       - run: npm ci
       - run: npm run release:check -- "$RELEASE_TAG"
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
@@ -57,8 +67,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
-          tagName: ${{ github.ref_name }}
-          releaseName: SoundClear ${{ github.ref_name }}
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: SoundClear ${{ inputs.tag || github.ref_name }}
           releaseDraft: true
           args: --target universal-apple-darwin
           releaseBody: |
@@ -113,8 +123,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
-          tagName: ${{ github.ref_name }}
-          releaseName: SoundClear ${{ github.ref_name }}
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: SoundClear ${{ inputs.tag || github.ref_name }}
           releaseDraft: true
           releaseBody: |
             Linux x64 (`.AppImage` y `.deb`).
@@ -155,8 +165,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
-          tagName: ${{ github.ref_name }}
-          releaseName: SoundClear ${{ github.ref_name }}
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: SoundClear ${{ inputs.tag || github.ref_name }}
           releaseDraft: true
           releaseBody: |
             macOS universal (Apple Silicon e Intel) y Windows x64 (`.exe` y `.msi`).

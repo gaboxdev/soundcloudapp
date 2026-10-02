@@ -24,9 +24,30 @@ npm test             # pruebas con node:test, sin dependencias de runtime
 npm run build        # tsc + vite build de apps/web
 npm run release:check
 npm run i18n -- --estricto
+npm run css:audit -- --estricto
 ```
 
 CI también compila y prueba Rust en Windows y macOS, empaqueta el Worker sin desplegarlo y comprueba las dependencias con `npm audit`. Si cambias escritorio, ejecuta `cargo check --locked` y `cargo test --locked` desde `apps/desktop/src-tauri`.
+
+**El Rust no corre en cada push.** Está en su propio workflow (`.github/workflows/desktop.yml`) y solo se dispara cuando el push toca `apps/desktop`, `apps/web/src`, `packages/soundcloud-api` o los manifiestos. Un cambio de textos o de CSS no gasta minutos de Actions. Si haces push dos veces seguidas, `cancel-in-progress` cancela la corrida anterior.
+
+## Publicar una release sin Actions
+
+No hace falta GitHub Actions para sacar binarios. En tu máquina:
+
+```bash
+npm run release:local
+```
+
+Eso encadena toda la puerta de calidad y termina compilando el escritorio. Los artefactos quedan en:
+
+```
+apps/desktop/src-tauri/target/release/bundle/
+```
+
+Ahí salen el `.msi` y el `.exe` (NSIS) en Windows, el `.app` y el `.dmg` en macOS, y el `.deb` y el `AppImage` en Linux. Desde ahí se sube el archivo a la release de GitHub a mano.
+
+El workflow de Actions queda para cuando quieras que las tres plataformas se compilen solas; también se puede lanzar a mano desde **Actions › Release › Run workflow** escribiendo la etiqueta.
 
 Si tu cambio toca la API de SoundCloud, corre también `npm run probe` (16 sondas contra la API real). No está en CI porque depende de la red y de que SoundCloud siga vivo, pero es la única forma de verificar una suposición sobre la API en vez de confiar en ella.
 

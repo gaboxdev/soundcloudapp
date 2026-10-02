@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# Si se empuja dos veces seguidas, la primera se cancela: solo cuenta la última.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -39,26 +44,3 @@ jobs:
       - run: npm run typecheck -w @soundclear/proxy-worker
       - run: npx wrangler deploy --dry-run
         working-directory: proxy/worker
-
-  desktop:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: apps/desktop/src-tauri
-      - run: npm ci
-      - run: npm run build
-      - run: cargo check --locked
-        working-directory: apps/desktop/src-tauri
-      - run: cargo test --locked
-        working-directory: apps/desktop/src-tauri

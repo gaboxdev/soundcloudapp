@@ -19,7 +19,8 @@
     "probe": "node scripts/api-probe.mjs",
     "i18n": "node scripts/i18n-audit.mjs",
     "css:audit": "node scripts/css-audit.mjs",
-    "release:check": "node scripts/check-release.mjs"
+    "release:check": "node scripts/check-release.mjs",
+    "release:local": "npm run typecheck && npm test && npm run release:check && npm run i18n -- --estricto && npm run css:audit -- --estricto && npm run build -w apps/desktop"
   },
   "engines": {
     "node": ">=22.18.0"

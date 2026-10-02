@@ -3,6 +3,11 @@ name = "soundclear"
 version = "0.1.0"
 description = "SoundClear — cliente de SoundCloud de escritorio"
 authors = ["SoundClear"]
+license = "MIT"
+repository = "https://github.com/gaboxdev/soundcloudapp"
+homepage = "https://github.com/gaboxdev/soundcloudapp"
+keywords = ["soundcloud", "music", "player", "tauri"]
+categories = ["multimedia::audio::players"]
 edition = "2021"
 
 [lib]
