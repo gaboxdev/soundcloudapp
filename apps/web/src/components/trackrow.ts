@@ -14,6 +14,7 @@ import { toast, toastErr } from '../ui/toast'
 import { openMenu, type MenuEntry } from './menu'
 import { openPlaylistPicker } from './playlistpicker'
 import { t } from '../core/i18n.ts'
+import { onDetach } from '../core/lifecycle'
 
 export interface TrackRowOptions {
   rank?: number
@@ -25,16 +26,7 @@ export interface TrackRowOptions {
 }
 
 function watchPlayer(el: HTMLElement, render: (state: PlayerState) => void): void {
-  let unsub: (() => void) | null = null
-  let attached = false
-  unsub = player.store.subscribe((state) => {
-    if (attached && !el.isConnected) {
-      unsub?.()
-      return
-    }
-    attached = true
-    render(state)
-  })
+  onDetach(el, player.store.subscribe(render))
 }
 
 
@@ -48,8 +40,8 @@ function heartButton(track: Track): HTMLElement {
   const btn = iconButton('heart', t('Guardar en favoritos'))
   const render = (liked: boolean): void => {
     btn.dataset.liked = String(liked)
-    btn.title = liked ? 'Quitar de favoritos' : t('Guardar en favoritos')
-    btn.setAttribute('aria-label', `${btn.title}: ${track.title}`)
+    btn.title = liked ? t('Quitar de favoritos') : t('Guardar en favoritos')
+    btn.setAttribute('aria-label', t('{action}: {title}', { action: btn.title, title: track.title }))
     btn.innerHTML = svgIcon(liked ? 'heartFill' : 'heart', 18)
   }
   render(player.isLiked(track))
@@ -65,17 +57,17 @@ function heartButton(track: Track): HTMLElement {
     player.toggleLike(track)
     const liked = player.isLiked(track)
     render(liked)
-    toast(liked ? 'Guardado en favoritos' : t('Quitado de favoritos'), 'ok')
+    toast(liked ? t('Guardado en favoritos') : t('Quitado de favoritos'), 'ok')
   })
   return btn
 }
 
 function queueButton(track: Track): HTMLElement {
-  const btn = iconButton('plus', `Añadir «${track.title}» a la cola`)
+  const btn = iconButton('plus', t('Añadir «{title}» a la cola', { title: track.title }))
   btn.addEventListener('click', (event) => {
     event.stopPropagation()
     const added = player.addToQueue(track)
-    if (added) toast(`«${track.title}» añadido a la cola`, 'ok')
+    if (added) toast(t('«{title}» añadido a la cola', { title: track.title }), 'ok')
     else toast(t('Ya estaba en la cola'))
   })
   return btn
@@ -145,8 +137,8 @@ document.addEventListener('keydown', (event) => {
 function offlineBadge(state: 'saved' | 'saving'): HTMLElement {
   const badge = h('span', {
     className: state === 'saving' ? 'offline-badge saving' : 'offline-badge',
-    title: state === 'saving' ? 'Guardando para sin conexión…' : t('Guardado en este dispositivo'),
-    'aria-label': state === 'saving' ? 'Guardando sin conexión' : t('Disponible sin conexión'),
+    title: state === 'saving' ? t('Guardando para sin conexión…') : t('Guardado en este dispositivo'),
+    'aria-label': state === 'saving' ? t('Guardando sin conexión') : t('Disponible sin conexión'),
   })
   badge.innerHTML = svgIcon('download', 12)
   return badge
@@ -200,7 +192,7 @@ export function trackMenu(track: Track, play: (track: Track) => void, extra: Men
       label: t('Añadir a la cola'),
       icon: 'plus',
       onSelect: () => {
-        toast(player.addToQueue(track) ? 'Añadido a la cola' : t('Ya estaba en la cola'))
+        toast(player.addToQueue(track) ? t('Añadido a la cola') : t('Ya estaba en la cola'))
       },
     },
     {
@@ -210,18 +202,18 @@ export function trackMenu(track: Track, play: (track: Track) => void, extra: Men
     },
     'separator',
     {
-      label: player.isLiked(track) ? 'Quitar de favoritos' : t('Guardar en favoritos'),
+      label: player.isLiked(track) ? t('Quitar de favoritos') : t('Guardar en favoritos'),
       icon: player.isLiked(track) ? 'heartFill' : 'heart',
       onSelect: () => {
         player.toggleLike(track)
-        toast(player.isLiked(track) ? 'Guardado en favoritos' : t('Quitado de favoritos'), 'ok')
+        toast(player.isLiked(track) ? t('Guardado en favoritos') : t('Quitado de favoritos'), 'ok')
       },
     },
   ]
   if (canWrite()) {
     entries.push(
       {
-        label: isReposted(track.id) ? 'Quitar el repost' : t('Repostear'),
+        label: isReposted(track.id) ? t('Quitar el repost') : t('Repostear'),
         icon: 'repost',
         disabled: isBusy(track.id),
         onSelect: () => void toggleRepost(track),
@@ -230,7 +222,7 @@ export function trackMenu(track: Track, play: (track: Track) => void, extra: Men
     )
   }
   entries.push({
-    label: offlineHas(track.id) ? 'Quitar de sin conexión' : t('Guardar sin conexión'),
+    label: offlineHas(track.id) ? t('Quitar de sin conexión') : t('Guardar sin conexión'),
     icon: 'download',
     disabled: offlineSaving(track.id) !== null,
     onSelect: () => void toggleOffline(track),
@@ -310,14 +302,14 @@ export function trackRow(track: Track | TrackStub, opts: TrackRowOptions = {}): 
 
   if (opts.actionButtons !== false) {
     const actions = h('div', { className: 'row-actions' })
-    const playBtn = iconButton('play', `Reproducir «${track.title}»`, 16)
+    const playBtn = iconButton('play', t('Reproducir «{title}»', { title: track.title }), 16)
     playBtn.classList.add('row-play')
     playBtn.addEventListener('click', (event) => {
       event.stopPropagation()
       playAction(track)
     })
     actions.append(playBtn, heartButton(track), queueButton(track))
-    const moreBtn = iconButton('more', `Más opciones de «${track.title}»`)
+    const moreBtn = iconButton('more', t('Más opciones de «{title}»', { title: track.title }))
     moreBtn.addEventListener('click', (event) => {
       event.stopPropagation()
       openMenu(trackMenu(track, playAction, opts.extraMenu ?? []), moreBtn)
@@ -327,7 +319,7 @@ export function trackRow(track: Track | TrackStub, opts: TrackRowOptions = {}): 
   }
 
   const stat = h('div', { className: 'stat' })
-  stat.textContent = opts.showPlays ? `${fmtCount(track.playback_count)} plays` : fmtTime(track.duration)
+  stat.textContent = opts.showPlays ? t('{count} plays', { count: fmtCount(track.playback_count) }) : fmtTime(track.duration)
   row.appendChild(stat)
 
   row.addEventListener('click', (event) => {

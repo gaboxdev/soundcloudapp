@@ -121,7 +121,7 @@ register('charts', (route, container) => {
     h(
       'span',
       { className: 'chip chip-static' },
-      slug ? 'Lo más reciente del género · sin ranking' : t('Ranking real de SoundCloud'),
+      slug ? t('Lo más reciente del género · sin ranking') : t('Ranking real de SoundCloud'),
     ),
     searchBox,
   ])
@@ -216,12 +216,12 @@ register('charts', (route, container) => {
       return
     }
     filterInfo.hidden = false
-    filterCount.textContent = `${visible} de ${rows.length} tracks cargados`
-    filterGlobal.textContent = `Buscar «${query}» en todo SoundCloud`
+    filterCount.textContent = t('{visible} de {total} tracks cargados', { visible, total: rows.length })
+    filterGlobal.textContent = t('Buscar «{query}» en todo SoundCloud', { query })
     const suggestion = genreSuggestion()
     filterGenre.hidden = suggestion === null
     if (suggestion) {
-      filterGenre.textContent = `Ver charts de ${genreLabel(suggestion)}`
+      filterGenre.textContent = t('Ver charts de {genre}', { genre: t(genreLabel(suggestion)) })
       filterGenre.href = link('/charts', { genre: suggestion })
     }
     noMatch.hidden = visible > 0 || loading || !(done || failed || filterLoads >= FILTER_MAX_LOADS)
@@ -387,7 +387,7 @@ register('charts', (route, container) => {
     list.innerHTML = ''
     list.appendChild(
       h('div', { className: 'page-error' }, [
-        h('h2', {}, slug ? 'No se pudieron cargar las novedades' : t('No se pudieron cargar los charts')),
+        h('h2', {}, slug ? t('No se pudieron cargar las novedades') : t('No se pudieron cargar los charts')),
         h('p', { className: 'text-dim' }, t('Comprueba tu conexión e inténtalo de nuevo.')),
         h('div', {}, [h('button', { className: 'btn btn-primary', onclick: () => retry() }, t('Reintentar'))]),
       ]),

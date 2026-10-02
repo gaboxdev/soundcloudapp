@@ -27,13 +27,22 @@ export async function startApp(): Promise<void> {
     const { player } = await import('./player/player')
     const offline = await import('./core/offline')
     const a11y = await import('./dev/a11y')
-    ;(window as unknown as { soundclear?: unknown }).soundclear = {
+    const scope = window as unknown as { soundclear?: Record<string, unknown> }
+    scope.soundclear = {
       player,
       offline,
       settings: getSettings,
       update: updateSettings,
       audit: a11y.auditA11y,
       auditRoutes: a11y.auditRoutes,
+    }
+    if (isTauri()) {
+      const review = await import('./dev/releasecheck')
+      const runner = review.installDesktopReview()
+      scope.soundclear.runDesktopReview = runner.runDesktopReview
+      scope.soundclear.results = runner.results
+      scope.soundclear.holdDesktopReview = runner.hold
+      if (runner.shouldAutoRun) void runner.runDesktopReview()
     }
   }
   if (import.meta.env.PROD && 'serviceWorker' in navigator) {

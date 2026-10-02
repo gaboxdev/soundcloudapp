@@ -11,6 +11,7 @@ import { skCircle } from '../ui/skeleton'
 import { openPalette } from './palette'
 import '../views/views.css'
 import { t } from '../core/i18n.ts'
+import { onDetach } from '../core/lifecycle'
 
 interface NavItem {
   path: string
@@ -182,9 +183,10 @@ export function renderHeader(): HTMLElement {
     window.setTimeout(closeSuggestions, 150)
   })
 
-  document.addEventListener('click', (event) => {
+  const onDocumentClick = (event: MouseEvent): void => {
     if (!searchWrap.contains(event.target as Node)) closeSuggestions()
-  })
+  }
+  document.addEventListener('click', onDocumentClick)
 
   const paletteBtn = h('button', {
     className: 'icon-btn palette-btn',
@@ -213,7 +215,7 @@ export function renderHeader(): HTMLElement {
     if (state.status !== 'ready' || !state.user) {
       accountLink.classList.remove('has-photo')
       accountLink.setAttribute('href', '#/settings')
-      accountLink.title = state.status === 'unknown' ? 'Comprobando sesión…' : t('Inicia sesión')
+      accountLink.title = state.status === 'unknown' ? t('Comprobando sesión…') : t('Inicia sesión')
       accountLink.setAttribute('aria-label', accountLink.title)
       if (state.status === 'unknown') {
         accountLink.appendChild(skCircle(30))
@@ -251,9 +253,15 @@ export function renderHeader(): HTMLElement {
 
   setActiveNav()
   syncSearchInput()
-  window.addEventListener('hashchange', () => {
+  const onNavigation = (): void => {
     setActiveNav()
     syncSearchInput()
+  }
+  window.addEventListener('hashchange', onNavigation)
+  onDetach(header, () => {
+    unsub?.()
+    document.removeEventListener('click', onDocumentClick)
+    window.removeEventListener('hashchange', onNavigation)
   })
 
   return header

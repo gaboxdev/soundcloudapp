@@ -15,14 +15,20 @@ const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Headers': 'Content-Type',
 }
 
-function json(body: unknown, status = 200): Response {
+function json(body: unknown, status = 200, extraHeaders: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' },
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      ...extraHeaders,
+    },
   })
 }
 
 async function proxy(request: Request, url: URL): Promise<Response> {
+  if (request.method !== 'GET') return json({ error: 'método no permitido' }, 405, { Allow: 'GET, OPTIONS' })
   const target = url.searchParams.get('url')
   if (!target) return json({ error: 'falta el parámetro url' }, 400)
   let upstreamUrl: URL
@@ -41,8 +47,12 @@ async function proxy(request: Request, url: URL): Promise<Response> {
   if (userAgent) headers['user-agent'] = userAgent
   const upstream = await fetch(upstreamUrl.toString(), {
     headers,
+    redirect: 'manual',
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
+  if (upstream.status === 0 || (upstream.status >= 300 && upstream.status < 400)) {
+    return json({ error: 'redirect del upstream no permitido' }, 502)
+  }
   if (upstream.status === 401 && injected) clientIds.invalidate()
   const body = await upstream.text()
   const contentType = upstream.headers.get('content-type') ?? 'application/json; charset=utf-8'
@@ -65,6 +75,7 @@ export default {
       const url = new URL(request.url)
       if (url.pathname === '/sl-proxy') return proxy(request, url)
       if (url.pathname === '/sl-client-id') {
+        if (request.method !== 'GET') return json({ error: 'método no permitido' }, 405, { Allow: 'GET, OPTIONS' })
         const refresh = wantsRefresh(url.searchParams.get('refresh'))
         const client_id = await clientIds.get(refresh)
         return json({ client_id, refreshed: refresh })

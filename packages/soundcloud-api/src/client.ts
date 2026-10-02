@@ -14,7 +14,7 @@ import type {
   Transcoding,
   User,
 } from './types'
-import { API_BASE, ApiError, isTauri, resetClientIdCache, type Transport } from './transport'
+import { API_BASE, ApiError, isTauri, resetClientIdCache, validateApiUrl, type Transport } from './transport'
 
 export interface SearchFilters {
   track?: boolean
@@ -166,7 +166,7 @@ export class SoundCloudAPI {
     params: Record<string, string | number | boolean | undefined>,
     refresh = false,
   ): Promise<string> {
-    const base = path.startsWith('http') ? new URL(path) : new URL(`${API_BASE}${path}`)
+    const base = validateApiUrl(new URL(path, `${API_BASE}/`).toString())
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined) base.searchParams.set(key, String(value))
     }
@@ -340,13 +340,12 @@ export class SoundCloudAPI {
   }
 
   async page<T>(href: string): Promise<SearchResponse<T>> {
-    return this.mapPaged<T>((await this.transport.getJSON(href)) as SearchResponse<unknown>)
+    return this.mapPaged<T>(await this.get<SearchResponse<unknown>>(href))
   }
 
   async me(): Promise<User | null> {
     try {
-      const url = await this.buildUrl('/me', {})
-      return (await this.transport.authedRequest('GET', url)) as User
+      return await this.authedRead<User>('/me')
     } catch (error) {
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) return null
       throw error
@@ -354,8 +353,7 @@ export class SoundCloudAPI {
   }
 
   async meLikes(userId: number, limit = 50, next: string | null = null): Promise<SearchResponse<Searchable>> {
-    const built = next ? await this.buildUrl(next, {}) : await this.buildUrl(`/users/${userId}/likes`, { limit })
-    const response = (await this.transport.authedRequest('GET', built)) as SearchResponse<unknown>
+    const response = await this.authedRead<SearchResponse<unknown>>(next ?? `/users/${userId}/likes`, next ? {} : { limit })
     const collection = ((response.collection ?? []) as unknown[]).flatMap(unwrapLike)
     return {
       ...response,
@@ -365,8 +363,7 @@ export class SoundCloudAPI {
   }
 
   async mePlaylists(userId: number, limit = 50, next: string | null = null): Promise<SearchResponse<Searchable>> {
-    const built = next ? await this.buildUrl(next, {}) : await this.buildUrl(`/users/${userId}/playlists`, { limit })
-    const response = (await this.transport.authedRequest('GET', built)) as SearchResponse<unknown>
+    const response = await this.authedRead<SearchResponse<unknown>>(next ?? `/users/${userId}/playlists`, next ? {} : { limit })
     const collection = ((response.collection ?? []) as unknown[]).flatMap(unwrapLike)
     return {
       ...response,
@@ -398,13 +395,34 @@ export class SoundCloudAPI {
     return (await this.transport.authedRequest(method, url, body)) as T
   }
 
+  private async authedRead<T>(
+    path: string,
+    params: Record<string, string | number | boolean | undefined> = {},
+  ): Promise<T> {
+    const doFetch = async (refresh: boolean): Promise<T> => {
+      const url = await this.buildUrl(path, params, refresh)
+      return (await this.transport.authedRequest('GET', url)) as T
+    }
+    try {
+      return await doFetch(false)
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        resetClientIdCache()
+        return doFetch(true)
+      }
+      throw error
+    }
+  }
+
   private async authedPaged<T>(
     path: string,
     params: Record<string, string | number | boolean | undefined>,
     next: string | null,
   ): Promise<SearchResponse<T>> {
-    const url = next ? await this.buildUrl(next, {}) : await this.buildUrl(path, { ...params, linked_partitioning: 1 })
-    const response = (await this.transport.authedRequest('GET', url)) as SearchResponse<unknown>
+    const response = await this.authedRead<SearchResponse<unknown>>(
+      next ?? path,
+      next ? {} : { ...params, linked_partitioning: 1 },
+    )
     return {
       ...response,
       collection: (response.collection ?? []) as T[],
@@ -430,8 +448,13 @@ export class SoundCloudAPI {
     const ids: number[] = []
     let next: string | null = null
     for (let page = 0; page < IDS_MAX_PAGES; page++) {
-      const url = next ? await this.buildUrl(next, {}) : await this.buildUrl(path, { limit: IDS_PAGE_SIZE, linked_partitioning: 1 })
-      const response = (await this.transport.authedRequest('GET', url)) as { collection?: unknown[]; next_href?: string | null }
+      const response: { collection?: unknown[]; next_href?: string | null } = await this.authedRead<{
+        collection?: unknown[]
+        next_href?: string | null
+      }>(
+        next ?? path,
+        next ? {} : { limit: IDS_PAGE_SIZE, linked_partitioning: 1 },
+      )
       for (const item of response.collection ?? []) {
         if (typeof item === 'number') ids.push(item)
         else if (item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'number') ids.push((item as { id: number }).id)
@@ -449,8 +472,9 @@ export class SoundCloudAPI {
   async repostIds(): Promise<number[]> {
     try {
       return await this.collectIds('/me/track_reposts/ids')
-    } catch {
-      return this.collectIds('/me/track_reposts')
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return this.collectIds('/me/track_reposts')
+      throw error
     }
   }
 
@@ -519,7 +543,7 @@ export class SoundCloudAPI {
   }
 
   async playlistTrackIds(playlistId: number): Promise<number[]> {
-    const playlist = await this.authed<Playlist>('GET', `/playlists/${playlistId}`)
+    const playlist = await this.authedRead<Playlist>(`/playlists/${playlistId}`)
     const entries = Array.isArray(playlist.tracks) ? playlist.tracks : []
     return entries.map((track) => track.id).filter((id): id is number => typeof id === 'number')
   }
@@ -563,8 +587,7 @@ export class SoundCloudAPI {
   private async tryAuthed<T>(path: string): Promise<T | null> {
     if (!isTauri()) return null
     try {
-      const url = await this.buildUrl(path, {})
-      return (await this.transport.authedRequest('GET', url)) as T
+      return await this.authedRead<T>(path)
     } catch {
       return null
     }

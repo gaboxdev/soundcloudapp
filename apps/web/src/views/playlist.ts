@@ -88,7 +88,7 @@ register('playlist', (route, container) => {
 
 function renderPlaylist(p: Playlist, container: HTMLElement): void {
   const isAlbum = p.kind === 'album' || p.is_album === true || p.set_type === 'album'
-  const noun = isAlbum ? 'álbum' : 'playlist'
+  const noun = isAlbum ? t('álbum') : 'playlist'
   const entries = Array.isArray(p.tracks) ? p.tracks : []
   const order = entries.map((t) => t.id)
   const declaredCount = p.track_count ?? entries.length
@@ -115,7 +115,7 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
 
   const chips = h('div', { className: 'chip-row' })
   if (isAlbum) chips.appendChild(h('span', { className: 'chip chip-static playlist-kind' }, t('Álbum')))
-  chips.appendChild(h('span', { className: 'chip chip-static' }, declaredCount === 1 ? '1 track' : `${declaredCount} tracks`))
+  chips.appendChild(h('span', { className: 'chip chip-static' }, t(declaredCount === 1 ? '{count} track' : '{count} tracks', { count: declaredCount })))
   const durationChip = h('span', { className: 'chip chip-static' })
   durationChip.style.display = 'none'
   chips.appendChild(durationChip)
@@ -125,9 +125,9 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
   const year = releaseYear(p)
   if (p.release_date && year.length > 0) chips.appendChild(h('span', { className: 'chip chip-static' }, year))
   else if (p.display_date) chips.appendChild(h('span', { className: 'chip chip-static' }, formatDate(p.display_date)))
-  if (p.likes_count != null) chips.appendChild(h('span', { className: 'chip chip-static' }, `${fmtCount(p.likes_count)} likes`))
+  if (p.likes_count != null) chips.appendChild(h('span', { className: 'chip chip-static' }, t('{count} likes', { count: fmtCount(p.likes_count) })))
   if (p.playback_count != null) {
-    chips.appendChild(h('span', { className: 'chip chip-static' }, `${fmtCount(p.playback_count)} plays`))
+    chips.appendChild(h('span', { className: 'chip chip-static' }, t('{count} plays', { count: fmtCount(p.playback_count) })))
   }
   info.appendChild(chips)
 
@@ -165,12 +165,12 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
   actions.appendChild(playBtn)
 
   const shuffleBtn = h('button', { className: 'btn btn-ghost' })
-  shuffleBtn.innerHTML = `${svgIcon('shuffle', 18)}<span>Mezclar</span>`
+  shuffleBtn.innerHTML = `${svgIcon('shuffle', 18)}<span>${t('Mezclar')}</span>`
   actions.appendChild(shuffleBtn)
 
   if (p.permalink_url) {
     const shareBtn = h('button', { className: 'btn btn-ghost', title: `Copiar el enlace de la ${noun}` })
-    shareBtn.innerHTML = `${svgIcon('link', 18)}<span>Compartir</span>`
+    shareBtn.innerHTML = `${svgIcon('link', 18)}<span>${t('Compartir')}</span>`
     shareBtn.addEventListener('click', () => void share())
     actions.appendChild(shareBtn)
 
@@ -181,7 +181,7 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
       rel: 'noopener noreferrer',
       title: t('Abrir en SoundCloud'),
     })
-    openLink.innerHTML = `${svgIcon('external', 18)}<span>Abrir en SoundCloud</span>`
+    openLink.innerHTML = `${svgIcon('external', 18)}<span>${t('Abrir en SoundCloud')}</span>`
     actions.appendChild(openLink)
   }
 
@@ -196,7 +196,7 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
   if (declaredCount === 0 || entries.length === 0) {
     const empty = h('div', { className: 'empty-state' })
     empty.appendChild(iconEl('playlist', 44))
-    empty.appendChild(h('p', null, isAlbum ? 'Este álbum está vacío' : t('Esta playlist está vacía')))
+    empty.appendChild(h('p', null, isAlbum ? t('Este álbum está vacío') : t('Esta playlist está vacía')))
     container.appendChild(empty)
     renderPlayButton()
     playBtn.disabled = true
@@ -236,7 +236,7 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
     note.textContent =
       unavailable.size === 1
         ? t('1 track ya no está disponible en SoundCloud')
-        : `${unavailable.size} tracks ya no están disponibles en SoundCloud`
+        : t('{count} tracks ya no están disponibles en SoundCloud', { count: unavailable.size })
   }
 
   function orderedTracks(): Track[] {
@@ -384,7 +384,7 @@ function renderPlaylist(p: Playlist, container: HTMLElement): void {
   function renderPlayButton(): void {
     const playing = isPlayingThis()
     playIcon.innerHTML = svgIcon(starting ? 'clock' : playing ? 'pause' : 'play', 18)
-    playLabel.textContent = starting ? 'Cargando…' : playing ? 'Pausar' : t('Reproducir')
+    playLabel.textContent = starting ? t('Cargando…') : playing ? t('Pausar') : t('Reproducir')
   }
 
   playBtn.addEventListener('click', () => {

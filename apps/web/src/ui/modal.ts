@@ -20,6 +20,38 @@ const FOCUSABLE =
 
 let openModals = 0
 
+export function trapFocus(panel: HTMLElement, onEscape: () => void): () => void {
+  const onKeyDown = (event: KeyboardEvent): void => {
+    const dialogs = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].filter((node) => !node.hidden && node.getClientRects().length > 0)
+    if (dialogs.at(-1) !== panel) return
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      onEscape()
+      return
+    }
+    if (event.key !== 'Tab') return
+    const items = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((node) => !node.closest('[hidden], [inert]') && node.getClientRects().length > 0)
+    if (!items.length) {
+      event.preventDefault()
+      panel.focus()
+      return
+    }
+    const first = items[0]
+    const last = items[items.length - 1]
+    const outside = !panel.contains(document.activeElement)
+    if (event.shiftKey && (document.activeElement === first || outside)) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && (document.activeElement === last || outside)) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
+  document.addEventListener('keydown', onKeyDown, true)
+  return () => document.removeEventListener('keydown', onKeyDown, true)
+}
+
 export function openModal(options: ModalOptions): Modal {
   const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
 
@@ -46,45 +78,25 @@ export function openModal(options: ModalOptions): Modal {
     closed = true
     openModals = Math.max(0, openModals - 1)
     if (openModals === 0) document.documentElement.classList.remove('modal-open')
-    document.removeEventListener('keydown', onKeyDown, true)
+    releaseFocus()
     root.remove()
     options.onClose?.()
     previous?.focus?.()
   }
 
-  const onKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      event.stopPropagation()
-      close()
-      return
-    }
-    if (event.key !== 'Tab') return
-    const items = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.offsetParent !== null)
-    if (items.length === 0) return
-    const first = items[0]
-    const last = items[items.length - 1]
-    const active = document.activeElement
-    if (event.shiftKey && (active === first || !panel.contains(active))) {
-      event.preventDefault()
-      last.focus()
-      return
-    }
-    if (!event.shiftKey && active === last) {
-      event.preventDefault()
-      first.focus()
-    }
-  }
+  const releaseFocus = trapFocus(panel, close)
 
   closeBtn.addEventListener('click', close)
   root.addEventListener('mousedown', (event) => {
     if (event.target === root) close()
   })
-  document.addEventListener('keydown', onKeyDown, true)
 
   openModals += 1
   document.documentElement.classList.add('modal-open')
   document.body.appendChild(root)
+  window.requestAnimationFrame(() => {
+    if (!closed && !panel.contains(document.activeElement)) closeBtn.focus()
+  })
 
   return { root, body, head, close }
 }

@@ -1,3 +1,4 @@
+import { t } from '../core/i18n.ts'
 import { isTauri } from '@soundclear/api'
 
 export function isDesktop(): boolean {
@@ -5,7 +6,7 @@ export function isDesktop(): boolean {
 }
 
 export async function desktopInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
-  if (!isTauri()) throw new Error('Solo disponible en la app de escritorio')
+  if (!isTauri()) throw new Error(t('Solo disponible en la app de escritorio'))
   const { invoke } = await import('@tauri-apps/api/core')
   return invoke<T>(command, args)
 }

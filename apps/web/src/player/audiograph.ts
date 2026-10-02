@@ -81,6 +81,7 @@ export interface AudioGraph {
   setEq(gains: readonly number[]): void
   setLeveling(on: boolean): void
   setVolume(gain: number): void
+  dispose(): void
   resume(): Promise<void>
   now(): number
   level(): number
@@ -138,6 +139,7 @@ export function createAudioGraph(gains: readonly number[], leveling: boolean, vo
   const analyser = ctx.createAnalyser()
   analyser.fftSize = 1024
   const samples = new Float32Array(analyser.fftSize)
+  let disposed = false
 
   let last: AudioNode = entry
   for (const filter of filters) {
@@ -163,6 +165,7 @@ export function createAudioGraph(gains: readonly number[], leveling: boolean, vo
   analyser.connect(ctx.destination)
 
   const setEq = (next: readonly number[]): void => {
+    if (disposed) return
     const at = ctx.currentTime
     filters.forEach((filter, index) => {
       const value = Math.min(EQ_MAX_DB, Math.max(-EQ_MAX_DB, next[index] ?? 0))
@@ -174,7 +177,7 @@ export function createAudioGraph(gains: readonly number[], leveling: boolean, vo
   setEq(gains)
 
   const resume = async (): Promise<void> => {
-    if (ctx.state === 'running') return
+    if (disposed || ctx.state === 'running') return
     try {
       await ctx.resume()
     } catch {
@@ -189,9 +192,36 @@ export function createAudioGraph(gains: readonly number[], leveling: boolean, vo
   document.addEventListener('keydown', unlock)
 
   const sources = new WeakMap<HTMLMediaElement, GainNode>()
+  const sourceNodes = new Set<AudioNode>()
+  const sourceGains = new Set<GainNode>()
+  const disconnect = (node: AudioNode): void => {
+    try {
+      node.disconnect()
+    } catch {
+      return
+    }
+  }
+  const dispose = (): void => {
+    if (disposed) return
+    disposed = true
+    document.removeEventListener?.('pointerdown', unlock)
+    document.removeEventListener?.('keydown', unlock)
+    for (const source of sourceNodes) disconnect(source)
+    for (const gain of sourceGains) disconnect(gain)
+    sourceNodes.clear()
+    sourceGains.clear()
+    for (const filter of filters) disconnect(filter)
+    disconnect(entry)
+    disconnect(limiter)
+    disconnect(makeup)
+    disconnect(master)
+    disconnect(analyser)
+    void ctx.close().catch(() => {})
+  }
 
   return {
     route(el: HTMLMediaElement): GainNode | null {
+      if (disposed) return null
       const existing = sources.get(el)
       if (existing) return existing
       try {
@@ -200,6 +230,8 @@ export function createAudioGraph(gains: readonly number[], leveling: boolean, vo
         gain.gain.value = 1
         source.connect(gain)
         gain.connect(entry)
+        sourceNodes.add(source)
+        sourceGains.add(gain)
         sources.set(el, gain)
         return gain
       } catch {
@@ -208,27 +240,31 @@ export function createAudioGraph(gains: readonly number[], leveling: boolean, vo
     },
     setEq,
     setLeveling(on: boolean): void {
+      if (disposed) return
       wire(on)
     },
     setVolume(gain: number): void {
+      if (disposed) return
       const value = Math.min(1, Math.max(0, gain))
       const at = ctx.currentTime
       master.gain.cancelScheduledValues(at)
       master.gain.setValueAtTime(master.gain.value, at)
       master.gain.linearRampToValueAtTime(value, at + RAMP_S)
     },
+    dispose,
     resume,
     now(): number {
       return ctx.currentTime
     },
     level(): number {
+      if (disposed) return 0
       analyser.getFloatTimeDomainData(samples)
       let sum = 0
       for (const value of samples) sum += value * value
       return Math.sqrt(sum / samples.length)
     },
     suspended(): boolean {
-      return ctx.state !== 'running'
+      return disposed || ctx.state !== 'running'
     },
   }
 }

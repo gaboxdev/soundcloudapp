@@ -4,6 +4,7 @@ import { getAPI } from '../api'
 import { createStore, type Store } from './store'
 import { getSettings } from './settings'
 import { t } from './i18n.ts'
+import { completeIdbTransaction, enqueueMutation, type MutationQueue } from './idb'
 
 export interface OfflineEntry {
   id: number
@@ -41,6 +42,13 @@ export const offlineStore: Store<OfflineState> = createStore<OfflineState>({
 let dbPromise: Promise<IDBDatabase | null> | null = null
 let initialized = false
 const ids = new Set<number>()
+const saveTokens = new Map<number, number>()
+let saveTokenCounter = 0
+const mutationQueue: MutationQueue = { tail: Promise.resolve() }
+
+class SaveInvalidated extends Error {}
+
+class OfflineTooLarge extends Error {}
 
 function openDb(): Promise<IDBDatabase | null> {
   if (dbPromise) return dbPromise
@@ -68,25 +76,39 @@ function openDb(): Promise<IDBDatabase | null> {
   return dbPromise
 }
 
-function tx<T>(store: string, mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T | null> {
-  return openDb().then(
-    (db) =>
-      new Promise<T | null>((resolve) => {
-        if (!db) {
-          resolve(null)
-          return
-        }
-        let request: IDBRequest<T>
-        try {
-          request = run(db.transaction(store, mode).objectStore(store))
-        } catch {
-          resolve(null)
-          return
-        }
-        request.onsuccess = () => resolve(request.result)
-        request.onerror = () => resolve(null)
-      }),
-  )
+function tx<T>(
+  stores: string | string[],
+  mode: IDBTransactionMode,
+  run: (transaction: IDBTransaction) => IDBRequest<T> | readonly IDBRequest<T>[] | null,
+): Promise<T | null> {
+  return openDb().then(async (db) => {
+    if (!db) return null
+    const transaction = db.transaction(stores, mode)
+    const result = await completeIdbTransaction(transaction, () => run(transaction))
+    return result as T
+  })
+}
+
+function serializeMutation<T>(task: () => Promise<T>): Promise<T> {
+  return enqueueMutation(mutationQueue, task)
+}
+
+function nextSaveToken(trackId: number): number {
+  const token = ++saveTokenCounter
+  saveTokens.set(trackId, token)
+  return token
+}
+
+function invalidateSave(trackId: number): number {
+  return nextSaveToken(trackId)
+}
+
+function isCurrentSave(trackId: number, token: number): boolean {
+  return saveTokens.get(trackId) === token
+}
+
+function clearSaveToken(trackId: number, token: number): void {
+  if (isCurrentSave(trackId, token)) saveTokens.delete(trackId)
 }
 
 function syncIndex(entries: OfflineEntry[]): void {
@@ -103,8 +125,13 @@ function syncIndex(entries: OfflineEntry[]): void {
 export function initOffline(): void {
   if (initialized || !offlineStore.get().supported) return
   initialized = true
-  void tx<OfflineEntry[]>(INDEX_STORE, 'readonly', (store) => store.getAll() as IDBRequest<OfflineEntry[]>).then((entries) => {
-    syncIndex(Array.isArray(entries) ? entries : [])
+  void serializeMutation(async () => {
+    try {
+      const entries = await tx<OfflineEntry[]>(INDEX_STORE, 'readonly', (transaction) => transaction.objectStore(INDEX_STORE).getAll() as IDBRequest<OfflineEntry[]>)
+      syncIndex(Array.isArray(entries) ? entries : [])
+    } catch {
+      syncIndex([])
+    }
   })
 }
 
@@ -132,7 +159,8 @@ export function offlineReason(track: Track): string | null {
   return null
 }
 
-function setSaving(trackId: number, progress: number | null): void {
+function setSaving(trackId: number, progress: number | null, token?: number): void {
+  if (token !== undefined && !isCurrentSave(trackId, token)) return
   const saving = { ...offlineStore.get().saving }
   if (progress === null) delete saving[trackId]
   else saving[trackId] = progress
@@ -145,22 +173,64 @@ function notify(trackId: number, state: OfflineSignal): void {
   window.dispatchEvent(new CustomEvent('sl:offline', { detail: { trackId, state } }))
 }
 
-async function readWithProgress(response: Response, trackId: number, expected: number): Promise<Blob> {
+async function readWithProgress(
+  response: Response,
+  trackId: number,
+  expected: number,
+  maxBytes: number,
+  active: () => boolean,
+  token: number,
+): Promise<Blob> {
   const body = response.body
   const type = response.headers.get('content-type') ?? 'audio/mpeg'
-  if (!body) return new Blob([await response.arrayBuffer()], { type })
+  if (!body) {
+    const buffer = await response.arrayBuffer()
+    if (!active()) throw new SaveInvalidated()
+    if (buffer.byteLength > maxBytes) throw new OfflineTooLarge()
+    return new Blob([buffer], { type })
+  }
   const reader = body.getReader()
   const chunks: BlobPart[] = []
   let received = 0
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break
+    if (!active()) {
+      try {
+        await reader.cancel()
+      } catch {
+        throw new SaveInvalidated()
+      }
+      throw new SaveInvalidated()
+    }
     if (!value) continue
     chunks.push(value as unknown as BlobPart)
     received += value.byteLength
-    if (expected > 0) setSaving(trackId, Math.min(0.99, received / expected))
+    if (received > maxBytes) {
+      try {
+        await reader.cancel()
+      } catch {
+        throw new OfflineTooLarge()
+      }
+      throw new OfflineTooLarge()
+    }
+    if (expected > 0) setSaving(trackId, Math.min(0.99, received / expected), token)
   }
+  if (!active()) throw new SaveInvalidated()
   return new Blob(chunks, { type })
+}
+
+function createOfflineEntry(track: Track, blob: Blob): OfflineEntry {
+  return {
+    id: track.id,
+    title: track.title,
+    artist: track.user?.username ?? t('Artista desconocido'),
+    artwork: track.artwork_url,
+    duration: track.duration,
+    bytes: blob.size,
+    mime: blob.type || 'audio/mpeg',
+    savedAt: Date.now(),
+  }
 }
 
 export async function saveOffline(track: Track): Promise<{ ok: boolean; message: string }> {
@@ -169,70 +239,116 @@ export async function saveOffline(track: Track): Promise<{ ok: boolean; message:
   if (ids.has(track.id)) return { ok: true, message: t('Ya estaba guardado') }
   if (offlineSaving(track.id) !== null) return { ok: false, message: t('Ya se está guardando') }
 
-  setSaving(track.id, 0)
+  const token = nextSaveToken(track.id)
+  setSaving(track.id, 0, token)
   notify(track.id, 'saving')
   try {
     const target = await getAPI().streamUrl(track)
+    if (!isCurrentSave(track.id, token)) throw new SaveInvalidated()
     if (!target) return { ok: false, message: t('SoundCloud no entregó audio para este track') }
+    if (target.snipped) return { ok: false, message: t('Los previews de 30 s de Go+ no se guardan') }
     if (target.protocol !== 'progressive') {
       return { ok: false, message: t('Este track solo llega por HLS y todavía no se puede guardar') }
     }
     const response = await fetch(target.url)
+    if (!isCurrentSave(track.id, token)) throw new SaveInvalidated()
     if (!response.ok) return { ok: false, message: `SoundCloud respondió ${response.status}` }
     const expected = Number(response.headers.get('content-length') ?? 0)
     const free = offlineFreeBytes()
     if (expected > 0 && expected > free) {
       return { ok: false, message: t('No cabe en el espacio reservado: súbelo en Ajustes › Datos') }
     }
-    const blob = await readWithProgress(response, track.id, expected)
+    const blob = await readWithProgress(response, track.id, expected, free, () => isCurrentSave(track.id, token), token)
     if (blob.size === 0) return { ok: false, message: t('La descarga llegó vacía') }
     if (blob.size > offlineFreeBytes()) {
       return { ok: false, message: t('No cabe en el espacio reservado: súbelo en Ajustes › Datos') }
     }
-    const stored = await tx<IDBValidKey>(AUDIO_STORE, 'readwrite', (store) => store.put(blob, track.id))
-    if (stored === null) return { ok: false, message: t('El navegador rechazó guardar el audio') }
-    const entry: OfflineEntry = {
-      id: track.id,
-      title: track.title,
-      artist: track.user?.username ?? t('Artista desconocido'),
-      artwork: track.artwork_url,
-      duration: track.duration,
-      bytes: blob.size,
-      mime: blob.type || 'audio/mpeg',
-      savedAt: Date.now(),
-    }
-    await tx<IDBValidKey>(INDEX_STORE, 'readwrite', (store) => store.put(entry, track.id))
-    syncIndex([...offlineStore.get().entries.filter((item) => item.id !== track.id), entry])
+    const entry = createOfflineEntry(track, blob)
+    const persisted = await serializeMutation(async () => {
+      if (!isCurrentSave(track.id, token)) return 'cancelled' as const
+      if (blob.size > offlineFreeBytes()) return 'too-large' as const
+      const indexed = await tx<IDBValidKey>([AUDIO_STORE, INDEX_STORE], 'readwrite', (transaction) => [
+        transaction.objectStore(AUDIO_STORE).put(blob, track.id),
+        transaction.objectStore(INDEX_STORE).put(entry, track.id),
+      ])
+      if (indexed === null) return 'unavailable' as const
+      if (!isCurrentSave(track.id, token)) return 'cancelled' as const
+      syncIndex([...offlineStore.get().entries.filter((item) => item.id !== track.id), entry])
+      return 'saved' as const
+    })
+    if (persisted === 'too-large') return { ok: false, message: t('No cabe en el espacio reservado: súbelo en Ajustes › Datos') }
+    if (persisted === 'unavailable') return { ok: false, message: t('El navegador rechazó guardar el audio') }
+    if (persisted === 'cancelled') return { ok: false, message: t('No se pudo guardar el track') }
     notify(track.id, 'saved')
     return { ok: true, message: t('Guardado para escuchar sin conexión') }
-  } catch {
+  } catch (error) {
+    if (error instanceof OfflineTooLarge) return { ok: false, message: t('No cabe en el espacio reservado: súbelo en Ajustes › Datos') }
     return { ok: false, message: t('No se pudo guardar el track') }
   } finally {
-    setSaving(track.id, null)
-    if (!ids.has(track.id)) notify(track.id, 'gone')
+    if (isCurrentSave(track.id, token)) {
+      setSaving(track.id, null, token)
+      if (!ids.has(track.id)) notify(track.id, 'gone')
+      clearSaveToken(track.id, token)
+    }
   }
 }
 
 export async function removeOffline(trackId: number): Promise<void> {
-  await tx<undefined>(AUDIO_STORE, 'readwrite', (store) => store.delete(trackId))
-  await tx<undefined>(INDEX_STORE, 'readwrite', (store) => store.delete(trackId))
-  syncIndex(offlineStore.get().entries.filter((entry) => entry.id !== trackId))
+  const token = invalidateSave(trackId)
+  setSaving(trackId, null)
+  if (!offlineStore.get().supported) {
+    syncIndex(offlineStore.get().entries.filter((entry) => entry.id !== trackId))
+    clearSaveToken(trackId, token)
+    notify(trackId, 'gone')
+    return
+  }
+  await serializeMutation(async () => {
+    const removed = await tx<undefined>([AUDIO_STORE, INDEX_STORE], 'readwrite', (transaction) => [
+      transaction.objectStore(AUDIO_STORE).delete(trackId),
+      transaction.objectStore(INDEX_STORE).delete(trackId),
+    ])
+    if (removed === null) throw new Error('IndexedDB unavailable')
+    syncIndex(offlineStore.get().entries.filter((entry) => entry.id !== trackId))
+  }).finally(() => clearSaveToken(trackId, token))
   notify(trackId, 'gone')
 }
 
 export async function clearOffline(): Promise<number> {
-  const removed = offlineStore.get().entries.length
-  await tx<undefined>(AUDIO_STORE, 'readwrite', (store) => store.clear())
-  await tx<undefined>(INDEX_STORE, 'readwrite', (store) => store.clear())
-  const previous = offlineStore.get().entries
-  syncIndex([])
-  for (const entry of previous) notify(entry.id, 'gone')
-  return removed
+  const activeIds = Object.keys(offlineStore.get().saving).map((id) => Number(id))
+  const tokens = activeIds.map((id) => [id, invalidateSave(id)] as const)
+  offlineStore.set({ saving: {} })
+  if (!offlineStore.get().supported) {
+    const previous = offlineStore.get().entries
+    syncIndex([])
+    for (const entry of previous) notify(entry.id, 'gone')
+    for (const [id, token] of tokens) clearSaveToken(id, token)
+    return previous.length
+  }
+  try {
+    return await serializeMutation(async () => {
+      const previous = offlineStore.get().entries
+      const cleared = await tx<undefined>([AUDIO_STORE, INDEX_STORE], 'readwrite', (transaction) => [
+        transaction.objectStore(AUDIO_STORE).clear(),
+        transaction.objectStore(INDEX_STORE).clear(),
+      ])
+      if (cleared === null) throw new Error('IndexedDB unavailable')
+      syncIndex([])
+      for (const entry of previous) notify(entry.id, 'gone')
+      return previous.length
+    })
+  } finally {
+    for (const [id, token] of tokens) clearSaveToken(id, token)
+  }
 }
 
 export async function offlineBlobUrl(trackId: number): Promise<string | null> {
   if (!ids.has(trackId)) return null
-  const blob = await tx<Blob>(AUDIO_STORE, 'readonly', (store) => store.get(trackId) as IDBRequest<Blob>)
+  let blob: Blob | null
+  try {
+    blob = await tx<Blob>(AUDIO_STORE, 'readonly', (transaction) => transaction.objectStore(AUDIO_STORE).get(trackId) as IDBRequest<Blob>)
+  } catch {
+    return null
+  }
   if (!blob || blob.size === 0) return null
   return URL.createObjectURL(blob)
 }

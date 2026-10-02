@@ -14,6 +14,7 @@ import { toast, toastErr } from '../ui/toast'
 import { virtualList, type VirtualList } from '../ui/virtuallist'
 import './views.css'
 import { t } from '../core/i18n.ts'
+import { onDetach } from '../core/lifecycle'
 
 type Tab = 'likes' | 'playlists' | 'history' | 'account'
 
@@ -313,10 +314,10 @@ register('likes', (_route, container) => {
     playAllBtn.disabled = state.likes.length === 0
     syncBtn.hidden = !desktop
     syncBtn.disabled = syncing || account.status !== 'ready'
-    syncLabel.textContent = syncing ? 'Sincronizando…' : t('Actualizar')
+    syncLabel.textContent = syncing ? t('Sincronizando…') : t('Actualizar')
     clearHistoryBtn.hidden = true
     headCount.textContent =
-      state.likes.length === 0 ? '' : `${state.likes.length} ${state.likes.length === 1 ? 'track' : 'tracks'}`
+      state.likes.length === 0 ? '' : t(state.likes.length === 1 ? '{count} track' : '{count} tracks', { count: state.likes.length })
     setNotice(
       state.likesTruncated
         ? t('Tienes tantos favoritos que SoundClear solo ha cargado los más recientes. Usa la búsqueda para encontrar el resto.')
@@ -341,12 +342,12 @@ register('likes', (_route, container) => {
     syncBtn.hidden = !useAccount
     if (useAccount) {
       syncBtn.disabled = accountHistoryLoading
-      syncLabel.textContent = accountHistoryLoading ? 'Cargando…' : t('Actualizar')
+      syncLabel.textContent = accountHistoryLoading ? t('Cargando…') : t('Actualizar')
     }
     clearHistoryBtn.hidden = useAccount
     clearHistoryBtn.disabled = state.history.length === 0
     headCount.textContent = ''
-    setNotice(useAccount ? 'Este historial vive en tu cuenta de SoundCloud y cruza dispositivos.' : null)
+    setNotice(useAccount ? t('Este historial vive en tu cuenta de SoundCloud y cruza dispositivos.') : null)
 
     if (useAccount) {
       if (accountHistoryFailed) {
@@ -438,8 +439,8 @@ register('likes', (_route, container) => {
         card.appendChild(artEl(pl.artwork_url, pl.title, { size: 't500x500' }))
         const meta = h('div', { className: 'pl-meta' })
         meta.appendChild(h('div', { className: 'pl-title truncate' }, pl.title))
-        const kind = pl.kind === 'album' || pl.is_album ? 'Álbum' : t('Playlist')
-        meta.appendChild(h('div', { className: 'pl-count text-faint' }, `${kind} · ${pl.track_count ?? 0} tracks`))
+        const kind = pl.kind === 'album' || pl.is_album ? t('Álbum') : t('Playlist')
+        meta.appendChild(h('div', { className: 'pl-count text-faint' }, `${kind} · ${t('{count} tracks', { count: pl.track_count ?? 0 })}`))
         card.appendChild(meta)
         grid.appendChild(card)
       }
@@ -513,9 +514,9 @@ register('likes', (_route, container) => {
     row.appendChild(info)
     card.appendChild(row)
     const stats = h('div', { className: 'chip-row account-stats' })
-    stats.appendChild(h('span', { className: 'chip chip-static' }, `${user.likes_count ?? 0} likes`))
-    stats.appendChild(h('span', { className: 'chip chip-static' }, `${user.followers_count ?? 0} seguidores`))
-    stats.appendChild(h('span', { className: 'chip chip-static' }, `${user.followings_count ?? 0} siguiendo`))
+    stats.appendChild(h('span', { className: 'chip chip-static' }, t('{count} likes', { count: user.likes_count ?? 0 })))
+    stats.appendChild(h('span', { className: 'chip chip-static' }, t('{count} seguidores', { count: user.followers_count ?? 0 })))
+    stats.appendChild(h('span', { className: 'chip chip-static' }, t('{count} siguiendo', { count: user.followings_count ?? 0 })))
     card.appendChild(stats)
     const actions = h('div', { className: 'account-actions' })
     actions.appendChild(h('a', { className: 'btn btn-ghost btn-sm', href: `#/user/${user.id}` }, t('Ver tu perfil')))
@@ -583,4 +584,10 @@ register('likes', (_route, container) => {
   })
 
   startSync()
+  onDetach(container, () => {
+    unsubPlayer?.()
+    unsubAccount?.()
+    observer.disconnect()
+    virtual?.destroy()
+  })
 })

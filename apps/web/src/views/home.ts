@@ -38,14 +38,15 @@ const SELECTION_TITLES: Record<string, string> = {
   'soundcloud:selections:trending-by-genre-playlists': 'Tendencias por género',
   'soundcloud:selections:buzzing': 'Artistas emergentes',
   'soundcloud:selections:personalised-curated-global': 'Seleccionado por SoundCloud',
-  'soundcloud:selections:charts-top': t('Lo más escuchado'),
-  'soundcloud:selections:charts-trending': t('Nuevo y en tendencia'),
-  'soundcloud:selections:new-for-you': t('Nuevo para ti'),
-  'soundcloud:selections:weekly': t('Novedades de la semana'),
+  'soundcloud:selections:charts-top': 'Lo más escuchado',
+  'soundcloud:selections:charts-trending': 'Nuevo y en tendencia',
+  'soundcloud:selections:new-for-you': 'Nuevo para ti',
+  'soundcloud:selections:weekly': 'Novedades de la semana',
 }
 
 function selectionTitle(selection: Selection): string {
-  return SELECTION_TITLES[selection.urn] ?? selection.title
+  const known = SELECTION_TITLES[selection.urn]
+  return known ? t(known) : selection.title
 }
 
 function selectionItems(selection: Selection): PlaylistSummary[] {
@@ -126,7 +127,7 @@ register('home', (_route, container) => {
     const row = h('div', { className: 'home-carousel' })
     posts.forEach((post, index) => {
       const track = post.track
-      const card = h('button', { className: 'home-card resume-card', type: 'button', title: `Reproducir «${track.title}»` })
+      const card = h('button', { className: 'home-card resume-card', type: 'button', title: t('Reproducir «{title}»', { title: track.title }) })
       const art = artEl(track.artwork_url, track.title, { size: 't300x300' })
       art.classList.add('home-card-art')
       card.append(
@@ -150,7 +151,7 @@ register('home', (_route, container) => {
     heading.appendChild(radio)
     const row = h('div', { className: 'home-carousel' })
     queue.forEach((track, index) => {
-      const card = h('button', { className: 'home-card resume-card', type: 'button', title: `Reproducir «${track.title}»` })
+      const card = h('button', { className: 'home-card resume-card', type: 'button', title: t('Reproducir «{title}»', { title: track.title }) })
       const art = artEl(track.artwork_url, track.title, { size: 't300x300' })
       art.classList.add('home-card-art')
       card.append(
@@ -169,7 +170,7 @@ register('home', (_route, container) => {
     heading.appendChild(h('a', { className: 'see-more link-hover', href: link('/charts') }, t('Ver charts')))
     const row = h('div', { className: 'chip-row home-genres' })
     for (const genre of GENRE_SHORTCUTS) {
-      row.appendChild(h('a', { className: 'chip', href: link('/charts', { genre: genre.slug }) }, genre.label))
+      row.appendChild(h('a', { className: 'chip', href: link('/charts', { genre: genre.slug }) }, t(genre.label)))
     }
     return h('section', { className: 'home-section' }, [heading, row])
   }
@@ -199,7 +200,7 @@ register('home', (_route, container) => {
     const art = artEl(track.artwork_url, track.title, {
       size: 't500x500',
       href: link(`/track/${track.id}`),
-      title: `Abrir «${track.title}»`,
+      title: t('Abrir «{title}»', { title: track.title }),
     })
     art.classList.add('hero-art')
     art.appendChild(artOverlay('expand', 22))
@@ -207,7 +208,7 @@ register('home', (_route, container) => {
     const fav = h('button', { className: 'icon-btn' })
     const paintLike = (liked: boolean): void => {
       fav.dataset.liked = String(liked)
-      fav.title = liked ? 'Quitar de favoritos' : t('Guardar en favoritos')
+      fav.title = liked ? t('Quitar de favoritos') : t('Guardar en favoritos')
       fav.innerHTML = svgIcon(liked ? 'heartFill' : 'heart', 20)
     }
     paintLike(player.isLiked(track))
@@ -216,7 +217,7 @@ register('home', (_route, container) => {
       player.toggleLike(track)
       const liked = player.isLiked(track)
       paintLike(liked)
-      toast(liked ? 'Guardado en favoritos' : t('Quitado de favoritos'), 'ok')
+      toast(liked ? t('Guardado en favoritos') : t('Quitado de favoritos'), 'ok')
     })
 
     let unsub: (() => void) | null = null
@@ -232,7 +233,7 @@ register('home', (_route, container) => {
     })
 
     const play = h('button', { className: 'btn btn-primary', onclick: () => player.playQueue(queue, 0) })
-    play.innerHTML = `${svgIcon('play', 18)} Reproducir`
+    play.innerHTML = `${svgIcon('play', 18)} ${t('Reproducir')}`
 
     const user = track.user as User | undefined
     const meta = h('div', { className: 'hero-meta' }, [
@@ -242,7 +243,7 @@ register('home', (_route, container) => {
       h('span', { className: 'hero-dot' }, '•'),
       h('span', {}, fmtTime(track.duration)),
       h('span', { className: 'hero-dot' }, '•'),
-      h('span', {}, `${fmtCount(track.playback_count)} plays`),
+      h('span', {}, t('{count} plays', { count: fmtCount(track.playback_count) })),
     ])
 
     return h('section', { className: 'hero card' }, [
@@ -269,7 +270,7 @@ register('home', (_route, container) => {
     )
     const heading = h('div', { className: 'h-section' }, [
       titleIcon(ranked ? 'trend' : 'waves', 18),
-      h('span', { className: 'truncate' }, ranked ? 'Tendencias' : t('Destacados')),
+      h('span', { className: 'truncate' }, ranked ? t('Tendencias') : t('Destacados')),
     ])
     if (ranked) heading.appendChild(h('a', { className: 'see-more link-hover', href: link('/charts') }, t('Ver más')))
     return h('section', { className: 'home-section' }, [heading, h('div', { className: 'home-list' }, rows)])
@@ -288,7 +289,7 @@ register('home', (_route, container) => {
     art.classList.add('home-card-art')
     const count = item.track_count ?? 0
     const owner = item.user?.username
-    const parts = [`${count} ${count === 1 ? 'track' : 'tracks'}`]
+    const parts = [t(count === 1 ? '{count} track' : '{count} tracks', { count })]
     if (owner) parts.push(owner)
     return h('a', { className: 'home-card', href: link(`/playlist/${item.id}`), title: item.title }, [
       art,

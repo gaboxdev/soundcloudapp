@@ -35,6 +35,14 @@ let loading: Promise<void> | null = null
 let playlists: PlaylistSummary[] | null = null
 let playlistsFor: number | null = null
 let initialized = false
+let activeAccount: number | null = null
+let generation = 0
+let mutation = 0
+const playlistWrites = new Map<number, Promise<AddToPlaylistResult>>()
+
+function currentScope(userId: number | null, scope: number): boolean {
+  return userId !== null && generation === scope && canWrite() && currentUserId() === userId
+}
 
 function bump(patch: Partial<SocialState>): void {
   socialStore.set((state) => ({ ...patch, rev: state.rev + 1 }))
@@ -75,8 +83,15 @@ export function loadSocial(force = false): Promise<void> {
   const fresh = loadedFor === userId && Date.now() - loadedAt < IDS_TTL
   if (fresh && !force) return Promise.resolve()
   const api = getAPI()
+  const scope = generation
+  const revision = mutation
   const run = (async () => {
     const [following, reposts] = await Promise.allSettled([api.followingIds(userId), api.repostIds()])
+    if (!currentScope(userId, scope)) return
+    if (revision !== mutation) {
+      loadedAt = 0
+      return
+    }
     const patch: Partial<SocialState> = {}
     if (following.status === 'fulfilled') {
       patch.followingIds = new Set(following.value)
@@ -92,7 +107,9 @@ export function loadSocial(force = false): Promise<void> {
   })()
   loading = run
   void run.finally(() => {
-    if (loading === run) loading = null
+    if (loading !== run) return
+    loading = null
+    if (currentScope(userId, scope) && revision !== mutation && socialStore.get().busy.size === 0) void loadSocial(true)
   })
   return run
 }
@@ -101,17 +118,29 @@ export function initSocial(): void {
   if (initialized) return
   initialized = true
   accountStore.subscribe((state) => {
-    if (state.status !== 'ready') return
-    if (state.user && state.user.id !== loadedFor) {
+    const userId = state.status === 'ready' ? state.user?.id ?? null : null
+    if (activeAccount !== userId) {
+      activeAccount = userId
+      generation++
+      loading = null
+      loadedFor = null
+      loadedAt = 0
       playlists = null
       playlistsFor = null
+      bump({ followingIds: new Set(), repostIds: new Set(), knownFollowing: false, knownReposts: false, busy: new Set() })
     }
+    if (userId === null) return
     void loadSocial()
   })
 }
 
 export async function toggleFollow(user: User): Promise<void> {
   if (!canWrite() || isBusy(user.id)) return
+  const userId = currentUserId()
+  const scope = generation
+  if (!socialStore.get().knownFollowing) await loadSocial()
+  if (!currentScope(userId, scope) || isBusy(user.id)) return
+  mutation++
   const wasFollowing = isFollowing(user.id)
   const next = new Set(socialStore.get().followingIds)
   if (wasFollowing) next.delete(user.id)
@@ -120,20 +149,32 @@ export async function toggleFollow(user: User): Promise<void> {
   setBusy(user.id, true)
   try {
     await getAPI().setFollowing(user.id, !wasFollowing)
-    toast(wasFollowing ? `Has dejado de seguir a ${user.username}` : `Ahora sigues a ${user.username}`, 'ok')
+    if (!currentScope(userId, scope)) return
+    toast(t(wasFollowing ? 'Has dejado de seguir a {artist}' : 'Ahora sigues a {artist}', { artist: user.username }), 'ok')
   } catch {
+    if (!currentScope(userId, scope)) return
     const rollback = new Set(socialStore.get().followingIds)
     if (wasFollowing) rollback.add(user.id)
     else rollback.delete(user.id)
     bump({ followingIds: rollback })
-    toastErr(wasFollowing ? 'No se pudo dejar de seguir' : t('No se pudo seguir a este artista'))
+    toastErr(wasFollowing ? t('No se pudo dejar de seguir') : t('No se pudo seguir a este artista'))
   } finally {
-    setBusy(user.id, false)
+    if (currentScope(userId, scope)) {
+      mutation++
+      loadedAt = 0
+      setBusy(user.id, false)
+      void loadSocial(true)
+    }
   }
 }
 
 export async function toggleRepost(track: Track): Promise<void> {
   if (!canWrite() || isBusy(track.id)) return
+  const userId = currentUserId()
+  const scope = generation
+  if (!socialStore.get().knownReposts) await loadSocial()
+  if (!currentScope(userId, scope) || isBusy(track.id)) return
+  mutation++
   const wasReposted = isReposted(track.id)
   const next = new Set(socialStore.get().repostIds)
   if (wasReposted) next.delete(track.id)
@@ -142,15 +183,22 @@ export async function toggleRepost(track: Track): Promise<void> {
   setBusy(track.id, true)
   try {
     await getAPI().setRepost(track.id, !wasReposted)
-    toast(wasReposted ? 'Repost quitado' : t('Reposteado en tu perfil'), 'ok')
+    if (!currentScope(userId, scope)) return
+    toast(wasReposted ? t('Repost quitado') : t('Reposteado en tu perfil'), 'ok')
   } catch {
+    if (!currentScope(userId, scope)) return
     const rollback = new Set(socialStore.get().repostIds)
     if (wasReposted) rollback.add(track.id)
     else rollback.delete(track.id)
     bump({ repostIds: rollback })
-    toastErr(wasReposted ? 'No se pudo quitar el repost' : t('No se pudo repostear'))
+    toastErr(wasReposted ? t('No se pudo quitar el repost') : t('No se pudo repostear'))
   } finally {
-    setBusy(track.id, false)
+    if (currentScope(userId, scope)) {
+      mutation++
+      loadedAt = 0
+      setBusy(track.id, false)
+      void loadSocial(true)
+    }
   }
 }
 
@@ -158,9 +206,23 @@ export async function myPlaylists(force = false): Promise<PlaylistSummary[]> {
   const userId = currentUserId()
   if (!canWrite() || userId === null) return []
   if (!force && playlists && playlistsFor === userId) return playlists
+  const scope = generation
   const api = getAPI()
-  const response = await api.mePlaylists(userId, 50).catch(() => api.userContent(userId, 'playlists', 0, 50))
-  const owned = response.collection.filter((item): item is Playlist => isPlaylistSummary(item))
+  let authenticated = true
+  let response = await api.mePlaylists(userId, 50).catch(() => {
+    authenticated = false
+    return api.userContent(userId, 'playlists', 0, 50)
+  })
+  const items = [...response.collection]
+  const cursors = new Set<string>()
+  while (response.next_href && !cursors.has(response.next_href)) {
+    if (!currentScope(userId, scope)) return []
+    cursors.add(response.next_href)
+    response = authenticated ? await api.mePlaylists(userId, 50, response.next_href) : await api.page(response.next_href)
+    items.push(...response.collection)
+  }
+  if (!currentScope(userId, scope)) return []
+  const owned = items.filter((item): item is Playlist => isPlaylistSummary(item))
   playlists = owned.filter((item) => item.user?.id === userId || item.user_id === userId)
   playlistsFor = userId
   return playlists
@@ -172,15 +234,32 @@ export function invalidatePlaylists(): void {
 }
 
 export async function addTrackToPlaylist(playlist: PlaylistSummary, track: Track): Promise<AddToPlaylistResult> {
-  const api = getAPI()
-  const ids = await api.playlistTrackIds(playlist.id)
-  if (ids.includes(track.id)) return 'duplicate'
-  await api.setPlaylistTracks(playlist.id, [...ids, track.id])
-  invalidatePlaylists()
-  return 'added'
+  const userId = currentUserId()
+  const scope = generation
+  if (!currentScope(userId, scope)) throw new Error(t('Solo disponible en la app de escritorio'))
+  const previous = playlistWrites.get(playlist.id)
+  const run = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(async (): Promise<AddToPlaylistResult> => {
+    if (!currentScope(userId, scope)) throw new Error(t('La sesión ha cambiado'))
+    const api = getAPI()
+    const ids = await api.playlistTrackIds(playlist.id)
+    if (!currentScope(userId, scope)) throw new Error(t('La sesión ha cambiado'))
+    if (ids.includes(track.id)) return 'duplicate'
+    await api.setPlaylistTracks(playlist.id, [...ids, track.id])
+    if (currentScope(userId, scope)) invalidatePlaylists()
+    return 'added'
+  })
+  playlistWrites.set(playlist.id, run)
+  try {
+    return await run
+  } finally {
+    if (playlistWrites.get(playlist.id) === run) playlistWrites.delete(playlist.id)
+  }
 }
 
 export async function createPlaylistWith(title: string, trackIds: number[], isPublic: boolean): Promise<PlaylistSummary> {
+  const userId = currentUserId()
+  const scope = generation
+  if (!currentScope(userId, scope)) throw new Error(t('Solo disponible en la app de escritorio'))
   const api = getAPI()
   const unique: number[] = []
   const seen = new Set<number>()
@@ -194,6 +273,7 @@ export async function createPlaylistWith(title: string, trackIds: number[], isPu
     invalidatePlaylists()
     return created
   } catch (error) {
+    if (!currentScope(userId, scope)) throw error
     const existing = await findRecentByTitle(title)
     if (existing) {
       invalidatePlaylists()

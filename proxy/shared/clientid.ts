@@ -1,4 +1,5 @@
 export const API_HOST = 'api-v2.soundcloud.com'
+export const API_ORIGIN = `https://${API_HOST}`
 export const CLIENT_ID_URL = 'https://soundcloud.com'
 export const REQUEST_TIMEOUT_MS = 10_000
 
@@ -18,7 +19,12 @@ const BUNDLE_PATTERN = /https:\/\/a-v2\.sndcdn\.com\/assets\/[A-Za-z0-9._-]+\.js
 const MAX_BUNDLES = 5
 
 export function isAllowedTarget(url: URL): boolean {
-  return url.protocol === 'https:' && ALLOWED_HOSTS.includes(url.hostname)
+  return (
+    url.origin === API_ORIGIN &&
+    ALLOWED_HOSTS.includes(url.hostname) &&
+    url.username === '' &&
+    url.password === ''
+  )
 }
 
 export function extractClientId(source: string): string | null {
@@ -38,8 +44,10 @@ export function bundleUrls(html: string): string[] {
 async function fetchText(url: string): Promise<string | null> {
   const res = await fetch(url, {
     headers: { 'user-agent': BROWSER_UA, accept: '*/*' },
+    redirect: 'manual',
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
+  if (res.status === 0 || (res.status >= 300 && res.status < 400)) return null
   if (!res.ok) return null
   return res.text()
 }

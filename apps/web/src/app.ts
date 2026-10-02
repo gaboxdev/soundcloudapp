@@ -6,7 +6,8 @@ import { openWelcome, welcomePending } from './components/welcome'
 import { openPalette } from './components/palette'
 import { openShortcuts } from './components/shortcuts'
 import { closeMenu } from './components/menu'
-import { refreshAccount, watchSessionWindow } from './core/account'
+import { accountStore, guestAllowed, refreshAccount, watchSessionWindow } from './core/account'
+import { onDetach } from './core/lifecycle'
 import { initSocial } from './core/social'
 import { initOffline } from './core/offline'
 import { mountAmbient } from './ui/ambient'
@@ -16,6 +17,7 @@ import { player } from './player/player'
 import { t } from './core/i18n.ts'
 
 let initialized = false
+let globalsBound = false
 
 export function remountApp(): void {
   const app = document.getElementById('app')
@@ -55,19 +57,29 @@ export function bootstrapApp(): void {
   app.appendChild(renderPlayerBar())
 
   app.appendChild(renderLoginGate())
-  if (welcomePending()) openWelcome()
+  let welcomeScheduled = false
+  const unsubscribeWelcome = accountStore.subscribe((state) => {
+    if (welcomeScheduled || !welcomePending() || (state.status !== 'ready' && !guestAllowed())) return
+    welcomeScheduled = true
+    window.requestAnimationFrame(() => {
+      if (main.isConnected && !document.documentElement.classList.contains('gate-open')) openWelcome()
+    })
+  })
+  onDetach(main, unsubscribeWelcome)
   watchSessionWindow()
   initSocial()
   initOffline()
   void refreshAccount()
 
-  window.addEventListener('hashchange', () => {
-    closeMenu()
-    render()
-  })
+  if (!globalsBound) {
+    globalsBound = true
+    window.addEventListener('hashchange', () => {
+      closeMenu()
+      render()
+    })
+    bindGlobalKeys()
+  }
   render()
-
-  bindGlobalKeys()
 }
 
 const INTERACTIVE = 'input, textarea, select, button, a[href], [role="button"], [contenteditable="true"]'
@@ -79,7 +91,7 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
 }
 
 function overlayOpen(): boolean {
-  return document.querySelector('.sl-modal, .menu-layer') !== null
+  return document.querySelector('.sl-modal, .menu-layer, .tour, .login-gate:not([hidden])') !== null
 }
 
 function focusSearch(): void {
@@ -94,6 +106,7 @@ function focusSearch(): void {
 
 function bindGlobalKeys(): void {
   window.addEventListener('keydown', (event) => {
+    if (document.documentElement.classList.contains('gate-open')) return
     const meta = event.metaKey || event.ctrlKey
 
     if (meta && !event.altKey && (event.key === 'k' || event.key === 'K')) {
@@ -156,17 +169,17 @@ function bindGlobalKeys(): void {
       case 'f': {
         if (!state.current) return
         player.toggleLike(state.current)
-        toast(player.isLiked(state.current) ? 'Guardado en favoritos' : t('Quitado de favoritos'), 'ok')
+        toast(player.isLiked(state.current) ? t('Guardado en favoritos') : t('Quitado de favoritos'), 'ok')
         return
       }
       case 's':
         player.toggleShuffle()
-        toast(player.store.get().shuffle ? 'Aleatorio activado' : t('Aleatorio desactivado'))
+        toast(player.store.get().shuffle ? t('Aleatorio activado') : t('Aleatorio desactivado'))
         return
       case 'r': {
         player.cycleRepeat()
         const mode = player.store.get().repeat
-        toast(mode === 'one' ? 'Repetir una vez' : mode === 'all' ? 'Repetir toda la cola' : t('Repetir desactivado'))
+        toast(mode === 'one' ? t('Repetir una vez') : mode === 'all' ? t('Repetir toda la cola') : t('Repetir desactivado'))
         return
       }
       case 'x': {

@@ -328,6 +328,8 @@ export function applyBackdrop(backdrop: Backdrop): void {
   const system = backdrop === 'sistema' || (backdrop === 'auto' && nativeGlassAvailable())
   if (system) root.dataset.backdrop = 'system'
   else delete root.dataset.backdrop
+  if (system && '__TAURI_INTERNALS__' in window && /Windows/.test(navigator.userAgent)) root.dataset.glassFallback = 'opaque'
+  else delete root.dataset.glassFallback
 }
 
 export function resetSettings(): Settings {

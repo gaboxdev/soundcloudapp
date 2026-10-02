@@ -44,6 +44,7 @@ export function installDom(): { dataset: Record<string, string> } {
     textContent: '',
     setAttribute(): void {},
     appendChild(): void {},
+    addEventListener(): void {},
     remove(): void {},
     classList: { add(): void {}, remove(): void {}, toggle(): void {} },
   }

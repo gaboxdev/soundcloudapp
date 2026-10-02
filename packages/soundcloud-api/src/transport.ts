@@ -17,6 +17,8 @@ export class ApiError extends Error {
 
 export const API_BASE = 'https://api-v2.soundcloud.com'
 
+const REQUEST_TIMEOUT_MS = 10_000
+
 let cachedClientId: string | null = null
 let clientIdPromise: Promise<string> | null = null
 let refreshPromise: Promise<string> | null = null
@@ -59,7 +61,10 @@ function shareClientId(load: (refresh: boolean) => Promise<string>, refresh: boo
 
 function fetchClientIdFrom(base: string, refresh: boolean): Promise<string> {
   return shareClientId(async (force) => {
-    const res = await fetch(`${base}/sl-client-id${force ? '?refresh=1' : ''}`)
+    const res = await fetch(`${base}/sl-client-id${force ? '?refresh=1' : ''}`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
     if (!res.ok) throw new ApiError(res.status, `sl-client-id falló: HTTP ${res.status}`)
     const data = (await res.json()) as { client_id?: string; refreshed?: boolean }
     return data.client_id ?? ''
@@ -71,14 +76,23 @@ export function resetClientIdCache(): void {
 }
 
 export function withClientId(href: string, clientId: string | null = cachedClientId): string {
+  const url = validateApiUrl(href)
   if (!clientId) return href
+  url.searchParams.set('client_id', clientId)
+  return url.toString()
+}
+
+export function validateApiUrl(href: string): URL {
+  let url: URL
   try {
-    const url = new URL(href)
-    url.searchParams.set('client_id', clientId)
-    return url.toString()
+    url = new URL(href)
   } catch {
-    return href
+    throw new Error('href de API inválido')
   }
+  if (url.origin !== API_BASE || url.username || url.password) {
+    throw new Error('href de API no permitido')
+  }
+  return url
 }
 
 export class ProxyTransport implements Transport {
@@ -89,7 +103,10 @@ export class ProxyTransport implements Transport {
   }
 
   async getJSON(url: string): Promise<unknown> {
-    const res = await fetch(`${this.base}/sl-proxy?url=${encodeURIComponent(url)}`)
+    const res = await fetch(`${this.base}/sl-proxy?url=${encodeURIComponent(url)}`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
     if (!res.ok) throw new ApiError(res.status, `proxy: HTTP ${res.status}`)
     return res.json()
   }

@@ -13,6 +13,7 @@ import { h, svgIcon } from '../ui/el'
 import { appLogo } from '../ui/logo'
 import '../styles/welcome.css'
 import { t } from '../core/i18n.ts'
+import { trapFocus } from '../ui/modal'
 
 interface Choice {
   label: string
@@ -185,6 +186,7 @@ function buildPreview(): HTMLElement {
 
 export function openWelcome(): void {
   if (openTour) return
+  const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
 
   const root = h('div', {
     className: 'tour',
@@ -412,13 +414,13 @@ export function openWelcome(): void {
           ? t('Naranja SoundCloud')
           : settings.accent.charAt(0).toUpperCase() + settings.accent.slice(1)
     const entries: [string, string][] = [
-      [t('Tema'), settings.theme === 'dark' ? 'Oscuro' : settings.theme === 'light' ? 'Claro' : t('Sistema')],
+      [t('Tema'), settings.theme === 'dark' ? t('Oscuro') : settings.theme === 'light' ? t('Claro') : t('Sistema')],
       [t('Acento'), accentLabel],
       [t('Cristal'), settings.glass.charAt(0).toUpperCase() + settings.glass.slice(1)],
-      [t('Densidad'), settings.density === 'comoda' ? 'Cómoda' : t('Compacta')],
-      [t('Barra'), settings.navLabels === 'texto' ? 'Icono y texto' : t('Solo iconos')],
-      [t('Iconos'), settings.iconStyle === 'plano' ? 'Sin fondo' : t('Con insignia')],
-      [t('Flechas'), settings.historyNav ? 'Visibles' : t('Ocultas')],
+      [t('Densidad'), settings.density === 'comoda' ? t('Cómoda') : t('Compacta')],
+      [t('Barra'), settings.navLabels === 'texto' ? t('Icono y texto') : t('Solo iconos')],
+      [t('Iconos'), settings.iconStyle === 'plano' ? t('Sin fondo') : t('Con insignia')],
+      [t('Flechas'), settings.historyNav ? t('Visibles') : t('Ocultas')],
     ]
     summary.replaceChildren()
     for (const [label, value] of entries) {
@@ -432,15 +434,15 @@ export function openWelcome(): void {
     const step = steps[index]
     const needsChoice = step.groups.length > 0 && !touched.has(step.key)
     nextBtn.disabled = needsChoice
-    hint.textContent = needsChoice ? 'Toca una opción para confirmarla y seguir.' : ''
+    hint.textContent = needsChoice ? t('Toca una opción para confirmarla y seguir.') : ''
   }
 
   function paintStep(): void {
     const step = steps[index]
-    kicker.textContent = `Paso ${index + 1} de ${steps.length}`
+    kicker.textContent = t('Paso {current} de {total}', { current: index + 1, total: steps.length })
     title.textContent = step.title
     lead.textContent = step.lead
-    nextBtn.textContent = index === steps.length - 1 ? 'Empezar a escuchar' : t('Continuar')
+    nextBtn.textContent = index === steps.length - 1 ? t('Empezar a escuchar') : t('Continuar')
     backBtn.hidden = index === 0
     cards = []
     bodyWrap.replaceChildren()
@@ -476,10 +478,11 @@ export function openWelcome(): void {
   }
 
   function close(): void {
-    document.removeEventListener('keydown', onKeyDown, true)
+    releaseFocus()
     document.documentElement.classList.remove('tour-open')
     root.remove()
     openTour = null
+    previous?.focus()
   }
 
   function finish(): void {
@@ -487,13 +490,7 @@ export function openWelcome(): void {
     close()
   }
 
-  const onKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape' && getSettings().onboarded) {
-      event.preventDefault()
-      event.stopPropagation()
-      close()
-    }
-  }
+  const releaseFocus = trapFocus(root, finish)
 
   backBtn.addEventListener('click', () => {
     if (index === 0) return
@@ -510,7 +507,6 @@ export function openWelcome(): void {
     paintStep()
   })
 
-  document.addEventListener('keydown', onKeyDown, true)
   document.documentElement.classList.add('tour-open')
   document.body.appendChild(root)
   paintStep()

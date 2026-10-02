@@ -7,6 +7,7 @@ interface Ambient {
 }
 
 const AMBIENT_SIZE = 't120x120'
+let mounted: HTMLElement | null = null
 
 function createAmbient(): Ambient {
   const root = document.createElement('div')
@@ -67,7 +68,9 @@ function createAmbient(): Ambient {
 }
 
 export function mountAmbient(): HTMLElement {
+  if (mounted?.isConnected) return mounted
   const ambient = createAmbient()
+  mounted = ambient.root
   document.body.insertBefore(ambient.root, document.body.firstChild)
 
   let lastTrackId: number | null = null

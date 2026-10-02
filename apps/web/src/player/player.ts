@@ -10,6 +10,7 @@ import { getSettings, updateSettings } from '../core/settings'
 import { aheadOf, buildOrder, dedupeById, dropPlayed, moveInList, nextInOrder, removeAt, shuffleWith } from './queueops'
 import { toast, toastErr } from '../ui/toast'
 import { audioGraphSupported, createAudioGraph, equalPowerCurves, normalizeGains, type AudioGraph } from './audiograph'
+import { confirmedLikeState, mergeLikeTracks, rememberLikeBaseline, type LikeOverride } from './likeops'
 import { t } from '../core/i18n.ts'
 
 export interface PlayerState {
@@ -66,8 +67,29 @@ interface Deck {
   gain: GainNode | null
   hls: { destroy(): void } | null
   trackId: number | null
+  generation: number
   ready: boolean
   localUrl: string | null
+}
+
+interface PreloadedDeck {
+  deck: number
+  trackId: number
+  index: number
+  generation: number
+}
+
+interface LikeMutation {
+  seq: number
+  desired: boolean
+  accountGeneration: number
+  pending: boolean
+}
+
+interface LikeSyncRun {
+  userId: number
+  generation: number
+  promise: Promise<void>
 }
 
 interface PersistedPlayer {
@@ -97,7 +119,9 @@ class Player {
   private activeDeck = 0
   private graph: AudioGraph | null = null
   private graphOff = false
-  private preloaded: { deck: number; trackId: number; index: number } | null = null
+  private preloaded: PreloadedDeck | null = null
+  private loadGeneration = 0
+  private preloadGeneration = 0
   private fading = false
   private fadeTimer: ReturnType<typeof setTimeout> | null = null
   private silentTicks = 0
@@ -105,14 +129,22 @@ class Player {
   private seekRaf = 0
   private lastErrorTrackId: number | null = null
   private failStreak = 0
-  private likesSync: Promise<void> | null = null
+  private likesSync: LikeSyncRun | null = null
   private likesSyncedFor: number | null = null
+  private likesSyncedGeneration = -1
   private likesSyncedAt = 0
   private likeIds = new Set<number>()
+  private likeRemote = new Map<number, boolean>()
+  private likeMutations = new Map<number, LikeMutation>()
+  private likeMutationSeq = 0
+  private likeWrites = new Map<number, Promise<void>>()
+  private likesAccountKey = ''
+  private likesAccountGeneration = 0
   private pendingResume: { trackId: number; progress: number } | null = null
   private lastProgressSave = 0
   private radioSeeds = new Set<number>()
   private radioPending: Promise<void> | null = null
+  private radioGeneration = 0
   private sleepTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor() {
@@ -166,7 +198,18 @@ class Player {
     this.bindWindowEvents()
 
     accountStore.subscribe((state) => {
-      if (state.status === 'ready') void this.syncAccountLikes()
+      const key = state.status === 'ready' && state.user ? `ready:${state.user.id}` : state.status
+      if (key !== this.likesAccountKey) {
+        this.likesAccountKey = key
+        this.likesAccountGeneration++
+        this.likesSyncedFor = null
+        this.likesSyncedGeneration = -1
+        this.likesSyncedAt = 0
+        this.likeMutations.clear()
+        this.likeRemote.clear()
+        this.likeWrites.clear()
+      }
+      if (state.status === 'ready' && state.user) void this.syncAccountLikes()
     })
   }
 
@@ -187,12 +230,13 @@ class Player {
     this.decks = []
     this.activeDeck = 0
     this.preloaded = null
+    this.preloadGeneration++
     for (let index = 0; index < count; index++) {
       const el = new Audio()
       el.preload = 'none'
       if (count > 1) el.crossOrigin = 'anonymous'
       el.playbackRate = settings.rate
-      const deck: Deck = { el, gain: null, hls: null, trackId: null, ready: false, localUrl: null }
+      const deck: Deck = { el, gain: null, hls: null, trackId: null, generation: 0, ready: false, localUrl: null }
       this.decks.push(deck)
       this.bindDeck(deck, index)
     }
@@ -232,9 +276,41 @@ class Player {
     this.order = buildOrder(queue.length, index, enabled)
   }
 
+  private invalidateLoads(): void {
+    this.loadGeneration++
+    if (this.state.loading) this.store.set({ loading: false })
+  }
+
+  private invalidateRadio(): void {
+    this.radioGeneration++
+    this.radioPending = null
+    if (this.state.radioLoading) this.store.set({ radioLoading: false })
+  }
+
+  private isCurrentLoad(generation: number, deck: Deck, trackId: number): boolean {
+    return (
+      this.loadGeneration === generation &&
+      this.deck === deck &&
+      deck.generation === generation &&
+      deck.trackId === trackId &&
+      this.state.current?.id === trackId
+    )
+  }
+
+  private isCurrentPreload(deckIndex: number, trackId: number, generation: number): boolean {
+    const pending = this.preloaded
+    return (
+      pending !== null &&
+      pending.deck === deckIndex &&
+      pending.trackId === trackId &&
+      pending.generation === generation &&
+      this.state.queue[pending.index]?.id === trackId
+    )
+  }
+
   private bindDeck(deck: Deck, index: number): void {
     const audio = deck.el
-    const active = (): boolean => this.activeDeck === index
+    const active = (): boolean => this.activeDeck === index && this.decks[index] === deck && deck.trackId === this.state.current?.id
 
     audio.addEventListener('timeupdate', () => {
       if (!active()) return
@@ -295,7 +371,8 @@ class Player {
 
     audio.addEventListener('error', () => {
       if (!active()) {
-        this.dropPreload()
+        const pending = this.preloaded
+        if (pending?.deck === index && pending.trackId === deck.trackId) this.dropPreload()
         return
       }
       const trackId = this.state.current?.id
@@ -332,11 +409,11 @@ class Player {
     this.persist()
   }
 
-  private applyPendingSeek(track: Track, resumeMs: number): void {
+  private applyPendingSeek(track: Track, resumeMs: number, generation: number, deck: Deck): void {
     if (resumeMs <= 0) return
     const audio = this.audio
     const seek = (): void => {
-      if (this.state.current?.id !== track.id) return
+      if (!this.isCurrentLoad(generation, deck, track.id)) return
       const seconds = resumeMs / 1000
       const duration = audio.duration
       if (Number.isFinite(duration) && duration > 0 && seconds >= duration - RESUME_TAIL_S) return
@@ -435,6 +512,7 @@ class Player {
   }
 
   async playTrack(track: Track, queue?: Track[], startIndex = -1): Promise<void> {
+    this.invalidateRadio()
     let q = queue
     let idx = startIndex
     if (!q) {
@@ -455,7 +533,7 @@ class Player {
   playQueue(tracks: Track[], startIndex = 0): void {
     if (tracks.length === 0) return
     const start = Math.min(Math.max(0, startIndex), tracks.length - 1)
-    this.store.set({ radioIds: [] })
+    this.store.set({ radioIds: [], radioLoading: false })
     this.radioSeeds.clear()
     void this.playTrack(tracks[start], tracks, start)
   }
@@ -476,6 +554,7 @@ class Player {
   }
 
   private async loadAndPlay(track: Track): Promise<void> {
+    const generation = ++this.loadGeneration
     const previous = this.state.current
     const resumeMs = this.pendingResume?.trackId === track.id ? this.pendingResume.progress : 0
     this.pendingResume = null
@@ -487,7 +566,8 @@ class Player {
     this.dropPreload()
     this.ensureGraph()
     const deck = this.deck
-    this.destroyHls(deck)
+    this.resetDeck(deck)
+    deck.generation = generation
     deck.trackId = track.id
     deck.ready = false
     this.silentTicks = 0
@@ -499,9 +579,17 @@ class Player {
 
     try {
       const local = await offlineBlobUrl(track.id)
+      if (!this.isCurrentLoad(generation, deck, track.id)) {
+        if (local) URL.revokeObjectURL(local)
+        return
+      }
       const target = local ? null : await getAPI().streamUrl(track)
+      if (!this.isCurrentLoad(generation, deck, track.id)) {
+        if (local) URL.revokeObjectURL(local)
+        return
+      }
       if (!local && !target) {
-        this.failCurrent(t('SoundCloud no entregó audio para este track'))
+        this.failCurrent(t('SoundCloud no entregó audio para este track'), generation)
         return
       }
       this.failStreak = 0
@@ -510,20 +598,23 @@ class Player {
         deck.localUrl = local
         deck.el.src = local
       } else if (target && target.protocol === 'hls') {
-        await this.attachHls(deck, target.url)
+        await this.attachHls(deck, target.url, () => this.isCurrentLoad(generation, deck, track.id))
       } else if (target) {
         deck.el.src = target.url
       }
+      if (!this.isCurrentLoad(generation, deck, track.id)) return
       deck.el.playbackRate = this.state.rate
-      this.applyPendingSeek(track, resumeMs)
+      this.applyPendingSeek(track, resumeMs, generation, deck)
       await this.graph?.resume()
+      if (!this.isCurrentLoad(generation, deck, track.id)) return
       try {
         await deck.el.play()
+        if (!this.isCurrentLoad(generation, deck, track.id)) return
       } catch {
-        this.store.set({ playing: false, loading: false })
+        if (this.isCurrentLoad(generation, deck, track.id)) this.store.set({ playing: false, loading: false })
       }
     } catch {
-      this.failCurrent(t('No se pudo reproducir este track'))
+      if (this.isCurrentLoad(generation, deck, track.id)) this.failCurrent(t('No se pudo reproducir este track'), generation)
     }
   }
 
@@ -552,38 +643,52 @@ class Player {
     const track = this.state.queue[index]
     if (!track || track.id === current.id || isDrmOnly(track)) return
     const deckIndex = this.activeDeck === 0 ? 1 : 0
-    this.preloaded = { deck: deckIndex, trackId: track.id, index }
-    void this.prepareDeck(deckIndex, track)
+    const generation = ++this.preloadGeneration
+    this.preloaded = { deck: deckIndex, trackId: track.id, index, generation }
+    void this.prepareDeck(deckIndex, track, generation)
   }
 
-  private async prepareDeck(deckIndex: number, track: Track): Promise<void> {
+  private async prepareDeck(deckIndex: number, track: Track, generation: number): Promise<void> {
     const deck = this.decks[deckIndex]
     if (!deck) return
     try {
       const local = await offlineBlobUrl(track.id)
+      if (!this.isCurrentPreload(deckIndex, track.id, generation)) {
+        if (local) URL.revokeObjectURL(local)
+        return
+      }
       const target = local ? null : await getAPI().streamUrl(track)
+      if (!this.isCurrentPreload(deckIndex, track.id, generation)) {
+        if (local) URL.revokeObjectURL(local)
+        return
+      }
       if (!local && !target) throw new Error('sin audio')
-      if (this.preloaded?.trackId !== track.id || this.preloaded.deck !== deckIndex) {
+      if (!this.isCurrentPreload(deckIndex, track.id, generation)) {
         if (local) URL.revokeObjectURL(local)
         return
       }
       this.destroyHls(deck)
       deck.trackId = track.id
+      deck.generation = this.loadGeneration
       deck.el.preload = 'auto'
       if (deck.gain) deck.gain.gain.value = 0
       if (local) {
         deck.localUrl = local
         deck.el.src = local
       } else if (target && target.protocol === 'hls') {
-        await this.attachHls(deck, target.url)
+        await this.attachHls(deck, target.url, () => this.isCurrentPreload(deckIndex, track.id, generation))
       } else if (target) {
         deck.el.src = target.url
       }
+      if (!this.isCurrentPreload(deckIndex, track.id, generation)) return
       deck.el.playbackRate = this.state.rate
       deck.ready = true
     } catch {
-      if (this.preloaded?.deck === deckIndex) this.preloaded = null
-      this.resetDeck(deck)
+      if (this.isCurrentPreload(deckIndex, track.id, generation)) {
+        this.preloaded = null
+        this.preloadGeneration++
+        this.resetDeck(deck)
+      }
     }
   }
 
@@ -630,6 +735,7 @@ class Player {
     }
     this.fading = true
     this.preloaded = null
+    this.preloadGeneration++
     void incoming.el.play().catch(() => {})
     this.activeDeck = pending.deck
     this.silentTicks = 0
@@ -680,11 +786,14 @@ class Player {
   }
 
   private dropGraph(message: string): void {
+    this.invalidateLoads()
     const track = this.state.current
     const at = this.audio.currentTime
     const wasPlaying = this.state.playing
     this.cancelFade()
+    this.dropPreload()
     for (const deck of this.decks) this.resetDeck(deck)
+    this.graph?.dispose()
     this.graph = null
     this.graphOff = true
     this.silentTicks = 0
@@ -743,8 +852,11 @@ class Player {
     const track = this.state.current
     const at = this.audio.currentTime
     const wasPlaying = this.state.playing
+    this.invalidateLoads()
     this.cancelFade()
+    this.dropPreload()
     for (const deck of this.decks) this.resetDeck(deck)
+    this.graph?.dispose()
     this.graph = null
     this.graphOff = false
     this.buildDecks(on && audioGraphSupported() ? 2 : 1)
@@ -772,7 +884,8 @@ class Player {
     updateSettings({ crossfade: seconds })
   }
 
-  private failCurrent(message: string): void {
+  private failCurrent(message: string, generation?: number): void {
+    if (generation !== undefined && generation !== this.loadGeneration) return
     this.failStreak++
     this.store.set({ error: message, loading: false, playing: false })
     if (this.failStreak >= FAIL_STREAK_MAX || this.state.queue.length < 2) return
@@ -780,18 +893,25 @@ class Player {
     if (target !== null) this.jumpTo(target)
   }
 
-  private async attachHls(deck: Deck, url: string): Promise<void> {
+  private async attachHls(deck: Deck, url: string, isValid: () => boolean): Promise<void> {
+    if (!isValid()) return
     if (!this.graph && deck.el.canPlayType('application/vnd.apple.mpegurl')) {
       deck.el.src = url
       return
     }
     const { default: Hls } = await import('hls.js')
+    if (!isValid()) return
     if (!Hls.isSupported()) {
       if (!deck.el.canPlayType('application/vnd.apple.mpegurl')) throw new Error(t('HLS no soportado'))
+      if (!isValid()) return
       deck.el.src = url
       return
     }
     const hls = new Hls({ maxBufferLength: 60 })
+    if (!isValid()) {
+      hls.destroy()
+      return
+    }
     deck.hls = hls
     hls.attachMedia(deck.el)
     hls.loadSource(url)
@@ -815,6 +935,7 @@ class Player {
       deck.localUrl = null
     }
     deck.trackId = null
+    deck.generation = 0
     deck.ready = false
     if (deck.gain) deck.gain.gain.cancelScheduledValues(this.graph?.now() ?? 0)
     if (deck.gain) deck.gain.gain.value = deck === this.deck ? 1 : 0
@@ -822,12 +943,14 @@ class Player {
 
   private stopAudio(): void {
     this.cancelFade()
+    this.dropPreload()
     for (const deck of this.decks) this.resetDeck(deck)
   }
 
   private dropPreload(): void {
     const pending = this.preloaded
     this.preloaded = null
+    this.preloadGeneration++
     if (!pending) return
     const deck = this.decks[pending.deck]
     if (deck && deck !== this.deck) this.resetDeck(deck)
@@ -867,6 +990,8 @@ class Player {
     }
     const gains: (GainNode | null)[] = this.decks.map((deck) => graph.route(deck.el))
     if (gains.some((gain) => gain === null)) {
+      for (const deck of this.decks) this.resetDeck(deck)
+      graph.dispose()
       this.graphOff = true
       this.buildDecks(1)
       return
@@ -906,7 +1031,11 @@ class Player {
   }
 
   pause(): void {
+    this.invalidateLoads()
     this.audio.pause()
+    this.store.set({ playing: false })
+    this.updatePlaybackState()
+    this.savePlayback()
   }
 
   retry(): void {
@@ -943,6 +1072,8 @@ class Player {
       return
     }
     if (this.tryRadioContinue()) return
+    this.invalidateLoads()
+    this.audio.pause()
     this.store.set({ playing: false })
     this.tick.set({ progress: 0 })
   }
@@ -967,6 +1098,7 @@ class Player {
   jumpTo(index: number): void {
     const { queue } = this.state
     if (index < 0 || index >= queue.length) return
+    this.invalidateRadio()
     this.store.set({ index })
     this.persist()
     void this.loadAndPlay(queue[index])
@@ -1189,6 +1321,8 @@ class Player {
   }
 
   clearQueue(): void {
+    this.invalidateLoads()
+    this.invalidateRadio()
     this.stopAudio()
     this.store.set({
       queue: [],
@@ -1199,6 +1333,7 @@ class Player {
       loading: false,
       error: null,
       radioIds: [],
+      radioLoading: false,
     })
     this.tick.set({ progress: 0, buffered: 0 })
     this.order = []
@@ -1209,10 +1344,12 @@ class Player {
 
   async startRadio(seed: Track, kind: 'track' | 'artist' = 'track'): Promise<void> {
     const seedId = kind === 'artist' ? seed.user?.id ?? seed.id : seed.id
-    this.store.set({ radioLoading: true })
     void this.playTrack(seed, [seed], 0)
+    this.store.set({ radioLoading: true })
+    const generation = this.radioGeneration
     try {
       const tracks = await getAPI().stationTracks(kind, seedId)
+      if (generation !== this.radioGeneration || this.state.current?.id !== seed.id) return
       const fresh = tracks.filter((track) => track.id !== seed.id)
       if (fresh.length === 0) {
         toastErr(t('No hay radio disponible para esto'))
@@ -1223,9 +1360,9 @@ class Player {
       const added = this.addManyToQueue(fresh, true)
       toast(`Radio activa · ${added} temas parecidos en la cola`, 'ok')
     } catch {
-      toastErr(t('No se pudo iniciar la radio'))
+      if (generation === this.radioGeneration) toastErr(t('No se pudo iniciar la radio'))
     } finally {
-      this.store.set({ radioLoading: false })
+      if (generation === this.radioGeneration) this.store.set({ radioLoading: false })
     }
   }
 
@@ -1253,7 +1390,10 @@ class Player {
 
   private async extendRadio(seed: Track, advance: boolean): Promise<void> {
     if (this.radioPending) {
-      await this.radioPending
+      const pending = this.radioPending
+      const generation = this.radioGeneration
+      await pending
+      if (generation !== this.radioGeneration) return
       if (advance) {
         const target = this.peekNext(false)
         if (target !== null) this.jumpTo(target)
@@ -1267,25 +1407,36 @@ class Player {
       else this.store.set({ playing: false })
       return
     }
+    const generation = this.radioGeneration
     this.radioSeeds.add(seed.id)
     this.store.set({ radioLoading: true })
     const run = (async () => {
       try {
         const tracks = await getAPI().stationTracks('track', seed.id)
+        if (generation !== this.radioGeneration) return
+        if (this.state.current?.id !== seed.id) {
+          this.radioSeeds.delete(seed.id)
+          return
+        }
         const fresh = tracks.filter((track) => track.id !== seed.id).slice(0, RADIO_APPEND)
+        if (fresh.length === 0) {
+          this.radioSeeds.delete(seed.id)
+          return
+        }
         this.addManyToQueue(fresh, true)
       } catch {
-        return
+        if (generation === this.radioGeneration) this.radioSeeds.delete(seed.id)
       } finally {
-        this.store.set({ radioLoading: false })
+        if (generation === this.radioGeneration) this.store.set({ radioLoading: false })
       }
     })()
     this.radioPending = run
     try {
       await run
     } finally {
-      this.radioPending = null
+      if (this.radioPending === run) this.radioPending = null
     }
+    if (generation !== this.radioGeneration) return
     if (!advance) return
     const target = this.peekNext(false)
     if (target !== null) this.jumpTo(target)
@@ -1300,34 +1451,100 @@ class Player {
     return this.likeIds.has(track.id)
   }
 
+  private likesAccountCurrent(userId: number, generation: number): boolean {
+    const account = accountStore.get()
+    return (
+      generation === this.likesAccountGeneration &&
+      account.status === 'ready' &&
+      account.user?.id === userId
+    )
+  }
+
+  private setTrackLiked(track: Track, liked: boolean): void {
+    const current = this.state.likes
+    const exists = this.likeIds.has(track.id)
+    if (exists === liked) return
+    const next = liked
+      ? [track, ...current.filter((item) => item.id !== track.id)]
+      : current.filter((item) => item.id !== track.id)
+    if (liked) this.likeIds.add(track.id)
+    else this.likeIds.delete(track.id)
+    this.store.set((state) => ({
+      likes: next,
+      isLiked: state.current?.id === track.id ? liked : state.isLiked,
+      likesRev: state.likesRev + 1,
+    }))
+    saveLikes(next)
+  }
+
+  private enqueueLikeWrite(track: Track, desired: boolean, userId: number, generation: number, seq: number, fallback: boolean): void {
+    const previous = this.likeWrites.get(track.id) ?? Promise.resolve()
+    const run = previous.catch(() => {}).then(async () => {
+      if (!this.likesAccountCurrent(userId, generation)) return
+      try {
+        await getAPI().toggleAccountLike(track.id, desired, userId)
+        if (!this.likesAccountCurrent(userId, generation)) return
+        const mutation = this.likeMutations.get(track.id)
+        if (mutation?.seq === seq && mutation.accountGeneration === generation) mutation.pending = false
+        this.likeRemote.set(track.id, desired)
+      } catch {
+        if (!this.likesAccountCurrent(userId, generation)) return
+        const mutation = this.likeMutations.get(track.id)
+        if (!mutation || mutation.seq !== seq || mutation.accountGeneration !== generation) return
+        const rollback = confirmedLikeState(this.likeRemote, track.id, fallback)
+        this.likeMutations.delete(track.id)
+        this.setTrackLiked(track, rollback)
+        toastErr(desired ? t('No se pudo guardar en favoritos') : t('No se pudo quitar de favoritos'))
+      }
+    })
+    this.likeWrites.set(track.id, run)
+    void run.finally(() => {
+      if (this.likeWrites.get(track.id) === run) this.likeWrites.delete(track.id)
+    })
+  }
+
   clearLocalLikes(): void {
     this.likeIds.clear()
+    this.likeMutations.clear()
+    this.likeRemote.clear()
     saveLikes([])
     this.store.set((state) => ({ likes: [], isLiked: false, likesRev: state.likesRev + 1, likesTruncated: false }))
     this.likesSyncedFor = null
+    this.likesSyncedGeneration = -1
     this.likesSyncedAt = 0
   }
 
   async syncAccountLikes(force = false): Promise<void> {
     if (!isDesktop()) return
-    const user = accountStore.get().user
+    const account = accountStore.get()
+    const user = account.status === 'ready' ? account.user : null
     if (!user) return
-    if (this.likesSync) {
-      await this.likesSync
+    const generation = this.likesAccountGeneration
+    if (this.likesSync && this.likesSync.userId === user.id && this.likesSync.generation === generation) {
+      await this.likesSync.promise
       return
     }
-    const fresh = this.likesSyncedFor === user.id && Date.now() - this.likesSyncedAt < LIKES_TTL
+    const fresh =
+      this.likesSyncedFor === user.id &&
+      this.likesSyncedGeneration === generation &&
+      Date.now() - this.likesSyncedAt < LIKES_TTL
     if (fresh && !force) return
-    const run = this.fetchAccountLikes(user.id)
-    this.likesSync = run
+    const run = this.fetchAccountLikes(user.id, generation)
+    const sync: LikeSyncRun = { userId: user.id, generation, promise: run }
+    this.likesSync = sync
     try {
       await run
     } finally {
-      this.likesSync = null
+      if (this.likesSync === sync) this.likesSync = null
     }
   }
 
-  private async fetchAccountLikes(userId: number): Promise<void> {
+  private async fetchAccountLikes(userId: number, generation: number): Promise<void> {
+    const startSeq = this.likeMutationSeq
+    const protectedMutations = new Map<number, number>()
+    for (const [id, mutation] of this.likeMutations) {
+      if (mutation.accountGeneration === generation && mutation.pending) protectedMutations.set(id, mutation.seq)
+    }
     try {
       const api = getAPI()
       const likes: Track[] = []
@@ -1342,48 +1559,54 @@ class Player {
         if (!next || res.collection.length === 0) break
         if (page === LIKES_MAX_PAGES - 1) truncated = true
       }
-      this.likeIds = new Set(likes.map((track) => track.id))
+      if (!this.likesAccountCurrent(userId, generation)) return
+      const overrides: LikeOverride[] = []
+      for (const [id, mutation] of this.likeMutations) {
+        if (
+          mutation.accountGeneration === generation &&
+          (mutation.seq > startSeq || protectedMutations.get(id) === mutation.seq)
+        ) {
+          overrides.push({ id, liked: mutation.desired })
+        }
+      }
+      const merged = mergeLikeTracks(likes, this.state.likes, overrides)
+      const confirmed = new Map(likes.map((track) => [track.id, true]))
+      for (const track of this.state.likes) {
+        if (!confirmed.has(track.id)) confirmed.set(track.id, false)
+      }
+      this.likeRemote = confirmed
+      this.likeIds = new Set(merged.map((track) => track.id))
       this.store.set((state) => ({
-        likes,
+        likes: merged,
         likesTruncated: truncated,
         likesRev: state.likesRev + 1,
         isLiked: state.current ? this.likeIds.has(state.current.id) : false,
       }))
-      saveLikes(likes)
+      saveLikes(merged)
       this.likesSyncedFor = userId
+      this.likesSyncedGeneration = generation
       this.likesSyncedAt = Date.now()
+      for (const [id, mutation] of this.likeMutations) {
+        if (mutation.accountGeneration === generation && !mutation.pending && mutation.seq <= this.likeMutationSeq) {
+          this.likeMutations.delete(id)
+        }
+      }
     } catch {
       return
     }
   }
 
   toggleLike(track: Track): void {
-    const { likes } = this.state
     const exists = this.likeIds.has(track.id)
-    const next = exists ? likes.filter((t) => t.id !== track.id) : [track, ...likes]
-    if (exists) this.likeIds.delete(track.id)
-    else this.likeIds.add(track.id)
-    this.store.set((state) => ({
-      likes: next,
-      isLiked: state.current?.id === track.id ? !exists : state.isLiked,
-      likesRev: state.likesRev + 1,
-    }))
-    saveLikes(next)
-    if (isDesktop() && accountStore.get().status === 'ready') {
-      void getAPI()
-        .toggleAccountLike(track.id, !exists, accountStore.get().user?.id)
-        .catch(() => {
-          if (exists) this.likeIds.add(track.id)
-          else this.likeIds.delete(track.id)
-          this.store.set((state) => ({
-            likes,
-            isLiked: state.current?.id === track.id ? exists : state.isLiked,
-            likesRev: state.likesRev + 1,
-          }))
-          saveLikes(likes)
-          toastErr(exists ? 'No se pudo quitar de favoritos' : t('No se pudo guardar en favoritos'))
-        })
-    }
+    const desired = !exists
+    this.setTrackLiked(track, desired)
+    const seq = ++this.likeMutationSeq
+    const account = accountStore.get()
+    const user = isDesktop() && account.status === 'ready' ? account.user : null
+    const generation = this.likesAccountGeneration
+    rememberLikeBaseline(this.likeRemote, track.id, exists)
+    this.likeMutations.set(track.id, { seq, desired, accountGeneration: generation, pending: user !== null })
+    if (user) this.enqueueLikeWrite(track, desired, user.id, generation, seq, exists)
   }
 }
 export const player = new Player()

@@ -11,6 +11,7 @@ import { waveformEl } from '../ui/waveform'
 import { player, type PlayerState } from '../player/player'
 import { openMenu, type MenuEntry } from './menu'
 import { t } from '../core/i18n.ts'
+import { onDetach } from '../core/lifecycle'
 
 const SAMPLES_CACHE_MAX = 60
 const samplesCache = new Map<number, number[]>()
@@ -179,7 +180,7 @@ export function renderPlayerBar(): HTMLElement {
     nowBadges.replaceChildren()
     for (const part of parts) {
       const label =
-        part === 'sleep' ? 'Temporizador' : part === 'radio' ? 'Radio' : part === 'radio-load' ? 'Buscando radio…' : part
+        part === 'sleep' ? t('Temporizador') : part === 'radio' ? t('Radio') : part === 'radio-load' ? t('Buscando radio…') : part
       nowBadges.appendChild(h('span', { className: 'now-badge' }, label))
     }
   }
@@ -216,13 +217,13 @@ export function renderPlayerBar(): HTMLElement {
     nowArt.appendChild(artOverlay('expand', 16))
     nowArt.classList.add('art-open')
     nowArt.href = link(`/track/${current.id}`)
-    nowArt.title = `Abrir «${current.title}»`
+    nowArt.title = t('Abrir «{title}»', { title: current.title })
     nowTitle.href = link(`/track/${current.id}`)
     nowTitle.textContent = current.title
     if (user) nowArtist.href = link(`/user/${user.id}`)
     else nowArtist.removeAttribute('href')
     nowArtist.textContent = user?.username ?? t('Artista desconocido')
-    announcer.textContent = `Suena ${current.title}${user?.username ? ` de ${user.username}` : ''}`
+    announcer.textContent = t('Suena {title}{artist}', { title: current.title, artist: user?.username ? ` ${t('de')} ${user.username}` : '' })
     timeNow.textContent = '0:00'
     timeTotal.textContent = fmtTime(current.duration)
     wave.setProgress(0)
@@ -246,7 +247,7 @@ export function renderPlayerBar(): HTMLElement {
     if (state.isLiked !== lastLiked) {
       lastLiked = state.isLiked
       likeBtn.dataset.liked = String(state.isLiked)
-      likeBtn.title = state.isLiked ? 'Quitar de favoritos' : t('Guardar en favoritos')
+      likeBtn.title = state.isLiked ? t('Quitar de favoritos') : t('Guardar en favoritos')
       likeBtn.innerHTML = svgIcon(state.isLiked ? 'heartFill' : 'heart', 18)
     }
 
@@ -254,9 +255,9 @@ export function renderPlayerBar(): HTMLElement {
     wave.setLoading(state.loading)
 
     shuffleBtn.classList.toggle('active', state.shuffle)
-    shuffleBtn.title = state.shuffle ? 'Aleatorio: activo' : t('Aleatorio')
+    shuffleBtn.title = state.shuffle ? t('Aleatorio: activo') : t('Aleatorio')
     repeatBtn.classList.toggle('active', state.repeat !== 'off')
-    repeatBtn.title = state.repeat === 'one' ? 'Repetir: una vez' : state.repeat === 'all' ? 'Repetir: todo' : t('Repetir')
+    repeatBtn.title = state.repeat === 'one' ? t('Repetir: una vez') : state.repeat === 'all' ? t('Repetir: todo') : t('Repetir')
     const repeatIcon = state.repeat === 'one' ? 'repeatOne' : 'repeat'
     if (repeatBtn.dataset.icon !== repeatIcon) {
       repeatBtn.dataset.icon = repeatIcon
@@ -266,7 +267,7 @@ export function renderPlayerBar(): HTMLElement {
     if (document.activeElement !== volumeSlider) volumeSlider.value = String(state.volume)
     const silent = state.muted || state.volume === 0
     const volumeIcon = silent ? 'mute' : 'volume'
-    volumeBtn.title = silent ? 'Activar sonido' : t('Silenciar')
+    volumeBtn.title = silent ? t('Activar sonido') : t('Silenciar')
     volumeBtn.classList.toggle('active', silent)
     if (volumeBtn.dataset.icon !== volumeIcon) {
       volumeBtn.dataset.icon = volumeIcon
@@ -287,12 +288,16 @@ export function renderPlayerBar(): HTMLElement {
     wave.setProgress(duration > 0 ? progress / duration : 0)
   }
 
-  player.store.subscribe(paintState)
-  player.tick.subscribe(paintTime)
+  const unsubscribeState = player.store.subscribe(paintState)
+  const unsubscribeTick = player.tick.subscribe(paintTime)
+  onDetach(bar, () => {
+    unsubscribeState()
+    unsubscribeTick()
+  })
 
   shuffleBtn.addEventListener('click', () => {
     player.toggleShuffle()
-    toast(player.store.get().shuffle ? 'Aleatorio activado' : t('Aleatorio desactivado'))
+    toast(player.store.get().shuffle ? t('Aleatorio activado') : t('Aleatorio desactivado'))
   })
 
   prevBtn.addEventListener('click', () => player.prev())
@@ -308,14 +313,14 @@ export function renderPlayerBar(): HTMLElement {
   repeatBtn.addEventListener('click', () => {
     player.cycleRepeat()
     const mode = player.store.get().repeat
-    toast(mode === 'one' ? 'Repetir una vez' : mode === 'all' ? 'Repetir toda la cola' : t('Repetir desactivado'))
+    toast(mode === 'one' ? t('Repetir una vez') : mode === 'all' ? t('Repetir toda la cola') : t('Repetir desactivado'))
   })
 
   likeBtn.addEventListener('click', () => {
     const { current } = player.store.get()
     if (!current) return
     player.toggleLike(current)
-    toast(player.isLiked(current) ? 'Guardado en favoritos' : t('Quitado de favoritos'), 'ok')
+    toast(player.isLiked(current) ? t('Guardado en favoritos') : t('Quitado de favoritos'), 'ok')
   })
 
   volumeSlider.addEventListener('input', () => player.setVolume(parseFloat(volumeSlider.value)))
@@ -352,23 +357,23 @@ export function renderPlayerBar(): HTMLElement {
     }
     for (const rate of player.rates()) {
       entries.push({
-        label: `Velocidad ${rate}×`,
+        label: t('Velocidad {rate}×', { rate }),
         icon: 'speed',
         hint: state.rate === rate ? '•' : undefined,
         onSelect: () => {
           player.setRate(rate)
-          toast(`Velocidad ${rate}×`)
+          toast(t('Velocidad {rate}×', { rate }))
         },
       })
     }
     entries.push('separator')
     for (const minutes of [15, 30, 60]) {
       entries.push({
-        label: `Pausar en ${minutes} min`,
+        label: t('Pausar en {minutes} min', { minutes }),
         icon: 'moon',
         onSelect: () => {
           player.setSleepTimer(minutes)
-          toast(`Se pausará en ${minutes} minutos`, 'ok')
+          toast(t('Se pausará en {minutes} minutos', { minutes }), 'ok')
         },
       })
     }
@@ -383,12 +388,12 @@ export function renderPlayerBar(): HTMLElement {
       })
     }
     entries.push('separator', {
-      label: getSettings().autoplay ? 'Desactivar radio infinita' : t('Activar radio infinita'),
+      label: getSettings().autoplay ? t('Desactivar radio infinita') : t('Activar radio infinita'),
       icon: 'radio',
       onSelect: () => {
         const next = !getSettings().autoplay
         updateSettings({ autoplay: next })
-        toast(next ? 'Radio infinita activada' : t('Radio infinita desactivada'))
+        toast(next ? t('Radio infinita activada') : t('Radio infinita desactivada'))
       },
     })
     openMenu(entries, moreBtn)

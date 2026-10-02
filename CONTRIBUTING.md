@@ -4,7 +4,7 @@ Gracias por pasarte. Este proyecto tiene una tesis muy concreta —**una app de 
 
 ## Requisitos
 
-- **Node ≥ 22** (`npm` con workspaces).
+- **Node ≥ 22.18** (`npm` con workspaces; Node 24 recomendado).
 - **Rust estable** solo si vas a tocar la app de escritorio (`apps/desktop/src-tauri`).
 - Nada más. El proyecto no usa linter ni formateador: la puerta de calidad es el compilador y los tests.
 
@@ -19,10 +19,14 @@ npm run dev:desktop  # escritorio (requiere Rust)
 Estos tres comandos tienen que pasar antes de abrir el PR. Es exactamente lo que corre CI:
 
 ```bash
-npm run typecheck    # tsc --noEmit en los 4 workspaces
-npm test             # 63 casos con node:test, sin dependencias
+npm run typecheck    # tsc --noEmit en los workspaces TypeScript
+npm test             # pruebas con node:test, sin dependencias de runtime
 npm run build        # tsc + vite build de apps/web
+npm run release:check
+npm run i18n -- --estricto
 ```
+
+CI también compila y prueba Rust en Windows y macOS, empaqueta el Worker sin desplegarlo y comprueba las dependencias con `npm audit`. Si cambias escritorio, ejecuta `cargo check --locked` y `cargo test --locked` desde `apps/desktop/src-tauri`.
 
 Si tu cambio toca la API de SoundCloud, corre también `npm run probe` (16 sondas contra la API real). No está en CI porque depende de la red y de que SoundCloud siga vivo, pero es la única forma de verificar una suposición sobre la API en vez de confiar en ella.
 

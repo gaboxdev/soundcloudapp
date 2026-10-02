@@ -3,6 +3,7 @@ import { ApiError } from '@soundclear/api'
 import { getAPI } from '../api'
 import { desktopInvoke, isDesktop } from '../api/auth'
 import { createStore } from './store'
+import { latestRequest } from './latest'
 
 export type AccountStatus = 'unknown' | 'guest' | 'ready'
 
@@ -15,8 +16,8 @@ export const accountStore = createStore<AccountState>({ status: 'unknown', user:
 
 const GUEST_KEY = 'sl:guest'
 
-let refreshing: Promise<void> | null = null
 let guest = readGuest()
+let sessionWatching = false
 
 function readGuest(): boolean {
   try {
@@ -70,42 +71,26 @@ function isAuthError(error: unknown): boolean {
   return /\b(401|403)\b/.test(String(error))
 }
 
-export function refreshAccount(): Promise<void> {
-  if (refreshing) return refreshing
-  refreshing = (async () => {
-    try {
-      if (!isDesktop()) {
-        setAccount('guest', null)
-        return
-      }
-      const user = await getAPI().me()
-      if (user) {
-        debugLog(`me() ok: ${user.username}`)
-        setAccount('ready', user)
-      } else {
-        debugLog('me() sin sesión')
-        setAccount('guest', null)
-      }
-    } catch (error) {
-      debugLog(`me() error: ${String(error)}`)
-      if (isAuthError(error)) {
-        setAccount('guest', null)
-        return
-      }
-      if (accountStore.get().status === 'ready') return
-      setAccount('guest', null)
-    } finally {
-      refreshing = null
-    }
-  })()
-  return refreshing
-}
+export const refreshAccount = latestRequest(
+  () => isDesktop() ? getAPI().me() : Promise.resolve(null),
+  (user) => {
+    debugLog(user ? 'me() sesión comprobada' : 'me() sin sesión')
+    setAccount(user ? 'ready' : 'guest', user)
+  },
+  (error) => {
+    debugLog('me() no se pudo comprobar la sesión')
+    if (isAuthError(error) || accountStore.get().status !== 'ready') setAccount('guest', null)
+  },
+)
 
 export function watchSessionWindow(): void {
-  if (!isDesktop()) return
+  if (!isDesktop() || sessionWatching) return
+  sessionWatching = true
   void import('@tauri-apps/api/event').then(({ listen }) => {
-    listen('sl-session-check', () => {
-      void refreshAccount()
-    }).catch(() => {})
+    return listen('sl-session-check', () => {
+      void refreshAccount(true)
+    })
+  }).catch(() => {
+    sessionWatching = false
   })
 }

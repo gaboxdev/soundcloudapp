@@ -8,14 +8,35 @@ permissions:
   contents: write
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run release:check -- "$RELEASE_TAG"
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run i18n -- --estricto
+      - run: npm audit --audit-level=high
+
   macos:
+    needs: validate
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
@@ -41,22 +62,27 @@ jobs:
           releaseDraft: true
           args: --target universal-apple-darwin
           releaseBody: |
-            Binario universal para macOS (Apple Silicon e Intel).
+            macOS universal (Apple Silicon e Intel) y Windows x64 (`.exe` y `.msi`).
 
             **El binario no está firmado ni notarizado.** macOS lo va a bloquear la primera vez:
             abre el `.app` con clic derecho › **Abrir**, o quita la cuarentena con
             `xattr -dr com.apple.quarantine /Applications/SoundClear.app`.
 
+            **Windows: el binario no está firmado.** SmartScreen puede avisar:
+            **Más información** › **Ejecutar de todas formas**.
+            El instalador descarga WebView2 si falta.
+
             Proyecto independiente, sin afiliación con SoundCloud.
 
   windows:
+    needs: validate
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
@@ -79,12 +105,14 @@ jobs:
           releaseName: SoundClear ${{ github.ref_name }}
           releaseDraft: true
           releaseBody: |
-            Instalador para Windows x64 (`.exe` de NSIS y `.msi`).
+            macOS universal (Apple Silicon e Intel) y Windows x64 (`.exe` y `.msi`).
 
-            Necesita el **WebView2 Runtime**, que ya viene en Windows 11 y en
-            Windows 10 actualizado; si falta, el instalador lo descarga.
+            **El binario no está firmado ni notarizado.** macOS lo va a bloquear la primera vez:
+            abre el `.app` con clic derecho › **Abrir**, o quita la cuarentena con
+            `xattr -dr com.apple.quarantine /Applications/SoundClear.app`.
 
-            **El binario no está firmado.** SmartScreen avisará la primera vez:
-            pulsa **Más información** › **Ejecutar de todas formas**.
+            **Windows: el binario no está firmado.** SmartScreen puede avisar:
+            **Más información** › **Ejecutar de todas formas**.
+            El instalador descarga WebView2 si falta.
 
             Proyecto independiente, sin afiliación con SoundCloud.

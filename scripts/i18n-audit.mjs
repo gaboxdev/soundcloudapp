@@ -7,7 +7,7 @@ const SALTAR = ['/dev/', '/test/', 'i18n.en.ts', 'i18n.ts']
 function ficheros(dir) {
   const salida = []
   for (const entrada of readdirSync(dir)) {
-    const ruta = join(dir, entrada)
+    const ruta = join(dir, entrada).replace(/\\/g, '/')
     if (statSync(ruta).isDirectory()) salida.push(...ficheros(ruta))
     else if (ruta.endsWith('.ts') && !SALTAR.some((s) => ruta.includes(s))) salida.push(ruta)
   }

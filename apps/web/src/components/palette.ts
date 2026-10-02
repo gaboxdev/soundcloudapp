@@ -61,7 +61,7 @@ function buildCommands(close: () => void): Command[] {
     { id: 'nav-settings', label: t('Abrir Ajustes'), icon: 'settings', keywords: 'ajustes settings', run: go('/settings') },
     {
       id: 'play-toggle',
-      label: state.playing ? 'Pausar' : t('Reproducir'),
+      label: state.playing ? t('Pausar') : t('Reproducir'),
       icon: state.playing ? 'pause' : 'play',
       hint: t('Espacio'),
       keywords: 'play pausa reproducir',
@@ -92,13 +92,13 @@ function buildCommands(close: () => void): Command[] {
     },
     {
       id: 'play-shuffle',
-      label: state.shuffle ? 'Desactivar aleatorio' : t('Activar aleatorio'),
+      label: state.shuffle ? t('Desactivar aleatorio') : t('Activar aleatorio'),
       icon: 'shuffle',
       hint: 'S',
       run: () => {
         close()
         player.toggleShuffle()
-        toast(player.store.get().shuffle ? 'Aleatorio activado' : t('Aleatorio desactivado'))
+        toast(player.store.get().shuffle ? t('Aleatorio activado') : t('Aleatorio desactivado'))
       },
     },
     {
@@ -113,25 +113,25 @@ function buildCommands(close: () => void): Command[] {
     },
     {
       id: 'play-rate',
-      label: `Velocidad: ${state.rate}× · cambiar`,
+      label: t('Velocidad: {rate}× · cambiar', { rate: state.rate }),
       icon: 'clock',
       keywords: 'velocidad rate tempo',
       run: () => {
         close()
         player.cycleRate()
-        toast(`Velocidad ${player.store.get().rate}×`)
+        toast(t('Velocidad {rate}×', { rate: player.store.get().rate }))
       },
     },
     {
       id: 'autoplay',
-      label: settings.autoplay ? 'Desactivar radio infinita' : t('Activar radio infinita'),
+      label: settings.autoplay ? t('Desactivar radio infinita') : t('Activar radio infinita'),
       icon: 'radio',
       keywords: 'autoplay radio infinita continuar',
       run: () => {
         close()
         const next = !getSettings().autoplay
         updateSettings({ autoplay: next })
-        toast(next ? 'Radio infinita activada' : t('Radio infinita desactivada'))
+        toast(next ? t('Radio infinita activada') : t('Radio infinita desactivada'))
       },
     },
   ]
@@ -140,7 +140,7 @@ function buildCommands(close: () => void): Command[] {
     commands.push(
       {
         id: 'current-like',
-        label: player.isLiked(current) ? `Quitar «${current.title}» de favoritos` : `Guardar «${current.title}» en favoritos`,
+        label: player.isLiked(current) ? t('Quitar «{title}» de favoritos', { title: current.title }) : t('Guardar «{title}» en favoritos', { title: current.title }),
         icon: player.isLiked(current) ? 'heartFill' : 'heart',
         hint: 'F',
         run: () => {
@@ -169,7 +169,7 @@ function buildCommands(close: () => void): Command[] {
       },
       {
         id: 'current-artist',
-        label: `Ir al perfil de ${current.user?.username ?? 'el artista'}`,
+        label: t('Ir al perfil de {artist}', { artist: current.user?.username ?? t('el artista') }),
         icon: 'user',
         run: () => {
           close()
@@ -190,7 +190,7 @@ function buildCommands(close: () => void): Command[] {
       commands.push(
         {
           id: 'current-repost',
-          label: isReposted(current.id) ? 'Quitar el repost de este track' : t('Repostear este track'),
+          label: isReposted(current.id) ? t('Quitar el repost de este track') : t('Repostear este track'),
           icon: 'repost',
           keywords: 'repost repostear',
           run: () => {
@@ -215,13 +215,13 @@ function buildCommands(close: () => void): Command[] {
   for (const minutes of [15, 30, 60]) {
     commands.push({
       id: `sleep-${minutes}`,
-      label: `Temporizador: pausar en ${minutes} min`,
+      label: t('Temporizador: pausar en {minutes} min', { minutes }),
       icon: 'clock',
       keywords: 'temporizador dormir sleep',
       run: () => {
         close()
         player.setSleepTimer(minutes)
-        toast(`Se pausará en ${minutes} minutos`, 'ok')
+        toast(t('Se pausará en {minutes} minutos', { minutes }), 'ok')
       },
     })
   }
@@ -240,14 +240,14 @@ function buildCommands(close: () => void): Command[] {
   }
 
   const themes: { value: Theme; label: string }[] = [
-    { value: 'dark', label: 'oscuro' },
-    { value: 'light', label: 'claro' },
-    { value: 'system', label: 'del sistema' },
+    { value: 'dark', label: 'Oscuro' },
+    { value: 'light', label: 'Claro' },
+    { value: 'system', label: 'Sistema' },
   ]
   for (const theme of themes) {
     commands.push({
       id: `theme-${theme.value}`,
-      label: `Tema ${theme.label}`,
+      label: t('Tema {theme}', { theme: t(theme.label) }),
       icon: theme.value === 'light' ? 'sun' : theme.value === 'dark' ? 'moon' : 'settings',
       keywords: 'tema theme apariencia',
       run: () => {
@@ -261,7 +261,7 @@ function buildCommands(close: () => void): Command[] {
   for (const glass of glasses) {
     commands.push({
       id: `glass-${glass}`,
-      label: `Cristal: ${glass}`,
+      label: t('Cristal: {glass}', { glass: t(glass === 'solido' ? 'Sólido' : glass === 'equilibrado' ? 'Equilibrado' : 'Cristal') }),
       icon: 'waves',
       keywords: 'cristal glass transparencia',
       run: () => {
@@ -275,7 +275,7 @@ function buildCommands(close: () => void): Command[] {
   for (const accent of accents) {
     commands.push({
       id: `accent-${accent}`,
-      label: `Acento: ${accent}`,
+      label: t('Acento: {accent}', { accent: t(accent === 'ambar' ? 'Ámbar' : accent === 'tono' ? 'Tono libre' : accent.charAt(0).toUpperCase() + accent.slice(1)) }),
       icon: 'disc',
       keywords: 'acento color accent',
       run: () => {
@@ -286,13 +286,13 @@ function buildCommands(close: () => void): Command[] {
   }
 
   const densities: { value: Density; label: string }[] = [
-    { value: 'comoda', label: t('cómoda') },
-    { value: 'compacta', label: 'compacta' },
+    { value: 'comoda', label: t('Cómoda') },
+    { value: 'compacta', label: t('Compacta') },
   ]
   for (const density of densities) {
     commands.push({
       id: `density-${density.value}`,
-      label: `Densidad ${density.label}`,
+      label: t('Densidad {density}', { density: density.label }),
       icon: 'list',
       keywords: 'densidad compacta espaciado',
       run: () => {
@@ -303,14 +303,14 @@ function buildCommands(close: () => void): Command[] {
   }
 
   const topbars: { value: Topbar; label: string }[] = [
-    { value: 'fija', label: 'fija' },
-    { value: 'auto', label: 'al desplazar' },
-    { value: 'oculta', label: 'oculta' },
+    { value: 'fija', label: 'Fija' },
+    { value: 'auto', label: 'Al desplazar' },
+    { value: 'oculta', label: 'Oculta' },
   ]
   for (const topbar of topbars) {
     commands.push({
       id: `topbar-${topbar.value}`,
-      label: `Barra superior ${topbar.label}`,
+      label: t('Barra superior {topbar}', { topbar: t(topbar.label) }),
       icon: 'layout',
       keywords: 'barra superior topbar cabecera',
       run: () => {
@@ -435,7 +435,7 @@ export function openPalette(initial = ''): void {
     }
 
     if (matched.length > 0) {
-      list.appendChild(sectionEl(needle ? 'Comandos' : t('Acciones rápidas')))
+      list.appendChild(sectionEl(needle ? t('Comandos') : t('Acciones rápidas')))
       for (const command of matched.slice(0, 8)) {
         const el = rowEl(command.icon, command.label, null, command.hint ?? null, command.run)
         rows.push({ el, run: command.run })
@@ -482,7 +482,7 @@ export function openPalette(initial = ''): void {
         modal.close()
         navigate('/search', { q: query.trim() })
       }
-      const el = rowEl('search', `Buscar «${query.trim()}» en SoundCloud`, null, '↵', run)
+      const el = rowEl('search', t('Buscar «{query}» en SoundCloud', { query: query.trim() }), null, '↵', run)
       rows.push({ el, run })
       list.appendChild(el)
     }

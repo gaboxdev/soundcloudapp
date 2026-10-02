@@ -4,7 +4,7 @@ App de escritorio de SoundClear construida con [Tauri 2](https://v2.tauri.app/) 
 
 ## Requisitos
 
-- Node.js >= 22 (lo pide `engines` en la raíz)
+- Node.js >= 22.18 (Node 24 recomendado; lo pide `engines` en la raíz)
 - Rust (stable) — [rustup](https://rustup.rs/)
 - macOS: Xcode Command Line Tools (`xcode-select --install`)
 - Windows: [Build Tools de Visual Studio](https://visualstudio.microsoft.com/downloads/) con
@@ -31,7 +31,7 @@ Genera el binario y el instalador en `src-tauri/target/release/bundle/`.
 ## Cómo funciona
 
 - `src-tauri/src/lib.rs` expone dos comandos que la web app usa en vez del proxy HTTP:
-  - `get_client_id`: extrae el `client_id` del HTML de soundcloud.com (cacheado 20 min).
+  - `get_client_id`: extrae el `client_id` del HTML de soundcloud.com (cacheado 15 min, con refresco serializado).
   - `proxy_fetch`: hace el fetch de `api-v2.soundcloud.com` inyectando el `client_id`, sin CORS.
 - El transporte de la web (`TauriTransport` en `packages/soundcloud-api`) detecta Tauri automáticamente y usa `invoke` en lugar del fetch al proxy.
 - Los medios (mp3, waveforms) se descargan directo desde el webview: sus CDNs envían `Access-Control-Allow-Origin: *`.

@@ -201,23 +201,23 @@ register('queue', (_route, container) => {
 
   shuffleBtn.addEventListener('click', () => {
     player.toggleShuffle()
-    toast(player.store.get().shuffle ? 'Aleatorio activado' : t('Aleatorio desactivado'))
+    toast(player.store.get().shuffle ? t('Aleatorio activado') : t('Aleatorio desactivado'))
   })
 
   repeatBtn.addEventListener('click', () => {
     player.cycleRepeat()
     const mode = player.store.get().repeat
-    toast(mode === 'one' ? 'Repetir una vez' : mode === 'all' ? 'Repetir toda la cola' : t('Repetir desactivado'))
+    toast(mode === 'one' ? t('Repetir una vez') : mode === 'all' ? t('Repetir toda la cola') : t('Repetir desactivado'))
   })
 
   playedBtn.addEventListener('click', () => {
     const removed = player.removePlayed()
-    toast(removed > 0 ? `${removed} ${removed === 1 ? 'track quitado' : 'tracks quitados'} de la cola` : t('No hay nada por delante que quitar'))
+    toast(removed > 0 ? t(removed === 1 ? '{count} track quitado de la cola' : '{count} tracks quitados de la cola', { count: removed }) : t('No hay nada por delante que quitar'))
   })
 
   dedupeBtn.addEventListener('click', () => {
     const removed = player.dedupeQueue()
-    toast(removed > 0 ? `${removed} ${removed === 1 ? 'duplicado' : 'duplicados'} fuera` : t('No había duplicados'))
+    toast(removed > 0 ? t(removed === 1 ? '{count} duplicado fuera' : '{count} duplicados fuera', { count: removed }) : t('No había duplicados'))
   })
 
   copyBtn.addEventListener('click', () => {
@@ -261,7 +261,7 @@ register('queue', (_route, container) => {
       count.textContent =
         state.queue.length === 0
           ? t('Cola vacía')
-          : `${state.queue.length} ${state.queue.length === 1 ? 'track' : 'tracks'} · ${fmtTime(total)}`
+          : `${t(state.queue.length === 1 ? '{count} track' : '{count} tracks', { count: state.queue.length })} · ${fmtTime(total)}`
       playAllBtn.disabled = state.queue.length === 0
       playedBtn.disabled = state.index <= 0
       dedupeBtn.disabled = state.queue.length < 2
@@ -276,12 +276,12 @@ register('queue', (_route, container) => {
     if (state.shuffle !== lastShuffle) {
       lastShuffle = state.shuffle
       shuffleBtn.classList.toggle('active', state.shuffle)
-      shuffleBtn.title = state.shuffle ? 'Aleatorio: activo' : t('Aleatorio')
+      shuffleBtn.title = state.shuffle ? t('Aleatorio: activo') : t('Aleatorio')
     }
     if (state.repeat !== lastRepeat) {
       lastRepeat = state.repeat
       repeatBtn.classList.toggle('active', state.repeat !== 'off')
-      repeatBtn.title = state.repeat === 'one' ? 'Repetir: una vez' : state.repeat === 'all' ? 'Repetir todo' : t('Repetir')
+      repeatBtn.title = state.repeat === 'one' ? t('Repetir: una vez') : state.repeat === 'all' ? t('Repetir todo') : t('Repetir')
       repeatBtn.innerHTML = svgIcon(state.repeat === 'one' ? 'repeatOne' : 'repeat', 18)
     }
   })

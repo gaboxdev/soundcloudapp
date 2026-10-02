@@ -1,3 +1,5 @@
+import { lang, t } from './i18n.ts'
+
 export function esc(value: unknown): string {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -27,24 +29,24 @@ export function timeAgo(iso: string | null | undefined): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ''
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
-  if (seconds < 60) return 'ahora mismo'
+  if (seconds < 60) return t('ahora mismo')
   const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `hace ${minutes} min`
+  if (minutes < 60) return t('hace {count} min', { count: minutes })
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `hace ${hours} h`
+  if (hours < 24) return t('hace {count} h', { count: hours })
   const days = Math.floor(hours / 24)
-  if (days < 30) return `hace ${days} d`
+  if (days < 30) return t('hace {count} d', { count: days })
   const months = Math.floor(days / 30)
-  if (months < 12) return `hace ${months} mes${months > 1 ? 'es' : ''}`
+  if (months < 12) return t(months === 1 ? 'hace {count} mes' : 'hace {count} meses', { count: months })
   const years = Math.floor(months / 12)
-  return `hace ${years} año${years > 1 ? 's' : ''}`
+  return t(years === 1 ? 'hace {count} año' : 'hace {count} años', { count: years })
 }
 
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return ''
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })
+  return date.toLocaleDateString(lang() === 'en' ? 'en' : 'es', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 const ARTWORK_SIZE = /-(t\d{2,4}x\d{2,4}|original|large|badge|small|mini|tiny)(\.\w+)$/

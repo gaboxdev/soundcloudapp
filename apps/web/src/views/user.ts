@@ -97,7 +97,7 @@ function descriptionEl(text: string): HTMLElement {
     const toggle = h('button', { className: 'desc-toggle', type: 'button' }, t('Mostrar más'))
     toggle.addEventListener('click', () => {
       const clamped = body.classList.toggle('clamped')
-      toggle.textContent = clamped ? 'Mostrar más' : t('Mostrar menos')
+      toggle.textContent = clamped ? t('Mostrar más') : t('Mostrar menos')
     })
     box.appendChild(toggle)
   }
@@ -146,7 +146,7 @@ register('user', (route, container) => {
     const node = h('div', {
       className: def.id === 'playlists' ? 'tab-panel panel-grid' : 'tab-panel',
       role: 'tabpanel',
-      'aria-label': def.label,
+      'aria-label': t(def.label),
     })
     node.hidden = def.id !== tab
     results.appendChild(node)
@@ -174,7 +174,7 @@ register('user', (route, container) => {
         'aria-selected': def.id === tab ? 'true' : 'false',
         onclick: () => selectTab(def.id),
       },
-      def.label,
+      t(def.label),
     )
     tabButtons.set(def.id, chip)
     tabs.appendChild(chip)
@@ -295,9 +295,9 @@ register('user', (route, container) => {
     }
 
     const meta = h('div', { className: 'profile-meta' })
-    meta.appendChild(h('span', { className: 'text-dim' }, `${fmtCount(u.followers_count)} seguidores`))
+    meta.appendChild(h('span', { className: 'text-dim' }, t('{count} seguidores', { count: fmtCount(u.followers_count) })))
     if (typeof u.followings_count === 'number') {
-      meta.appendChild(h('span', { className: 'text-dim' }, `${fmtCount(u.followings_count)} siguiendo`))
+      meta.appendChild(h('span', { className: 'text-dim' }, t('{count} siguiendo', { count: fmtCount(u.followings_count) })))
     }
     const place = [u.city, u.country_code].filter((part) => typeof part === 'string' && part.trim() !== '').join(', ')
     if (place) meta.appendChild(h('span', { className: 'profile-place text-dim' }, place))
@@ -306,9 +306,9 @@ register('user', (route, container) => {
     if (u.description && u.description.trim()) info.appendChild(descriptionEl(u.description.trim()))
 
     const chips = h('div', { className: 'profile-chips' })
-    chips.appendChild(h('span', { className: 'chip chip-static' }, `${fmtCount(u.track_count)} tracks`))
-    chips.appendChild(h('span', { className: 'chip chip-static' }, `${fmtCount(u.playlist_count)} playlists`))
-    chips.appendChild(h('span', { className: 'chip chip-static' }, `${fmtCount(u.likes_count)} likes`))
+    chips.appendChild(h('span', { className: 'chip chip-static' }, t('{count} tracks', { count: fmtCount(u.track_count) })))
+    chips.appendChild(h('span', { className: 'chip chip-static' }, t('{count} playlists', { count: fmtCount(u.playlist_count) })))
+    chips.appendChild(h('span', { className: 'chip chip-static' }, t('{count} likes', { count: fmtCount(u.likes_count) })))
     info.appendChild(chips)
 
     const actions = h('div', { className: 'profile-actions' })
@@ -328,7 +328,7 @@ register('user', (route, container) => {
         followBtn.setAttribute('aria-pressed', String(following))
         followBtn.replaceChildren(
           iconEl(following ? 'check' : 'plus', 16),
-          document.createTextNode(busy ? 'Guardando…' : following ? 'Siguiendo' : t('Seguir')),
+          document.createTextNode(busy ? t('Guardando…') : following ? t('Siguiendo') : t('Seguir')),
         )
       }
       paintFollow()
@@ -388,7 +388,7 @@ register('user', (route, container) => {
           const avatar = avatarEl(user.avatar_url, user.username, 72)
           avatar.classList.add('related-avatar')
           card.append(avatar, h('span', { className: 'related-name truncate' }, user.username))
-          card.appendChild(h('span', { className: 'related-sub truncate' }, `${fmtCount(user.followers_count)} seguidores`))
+          card.appendChild(h('span', { className: 'related-sub truncate' }, t('{count} seguidores', { count: fmtCount(user.followers_count) })))
           row.appendChild(card)
         }
         related.appendChild(row)
@@ -561,7 +561,7 @@ register('user', (route, container) => {
     card.appendChild(artEl(pl.artwork_url, title, { size: 't500x500' }))
     const meta = h('div', { className: 'pl-meta' })
     meta.appendChild(h('div', { className: 'pl-title truncate' }, title))
-    const kind = pl.is_album === true || pl.set_type === 'album' ? 'Álbum' : t('Playlist')
+    const kind = pl.is_album === true || pl.set_type === 'album' ? t('Álbum') : t('Playlist')
     const author = pl.user?.username
     const sub = author && author !== profile?.username ? `${kind} · ${pl.track_count ?? 0} tracks · ${author}` : `${kind} · ${pl.track_count ?? 0} tracks`
     meta.appendChild(h('div', { className: 'pl-count text-faint truncate' }, sub))

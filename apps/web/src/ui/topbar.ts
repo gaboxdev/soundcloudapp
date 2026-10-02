@@ -1,4 +1,5 @@
 import { isDesktop } from '../api/auth'
+import { onDetach } from '../core/lifecycle'
 
 const SCROLL_STEP = 6
 const TOP_ZONE = 4
@@ -56,14 +57,21 @@ export function mountTopbar(header: HTMLElement): HTMLElement {
   })
 
   window.addEventListener('scroll', onScroll, { passive: true })
-  window.addEventListener('hashchange', () => {
+  const onNavigation = (): void => {
     lastY = 0
     scrolledAway = false
     paint()
-  })
-  new MutationObserver(paint).observe(document.documentElement, {
+  }
+  window.addEventListener('hashchange', onNavigation)
+  const observer = new MutationObserver(paint)
+  observer.observe(document.documentElement, {
     attributes: true,
     attributeFilter: ['data-topbar'],
+  })
+  onDetach(header, () => {
+    window.removeEventListener('scroll', onScroll)
+    window.removeEventListener('hashchange', onNavigation)
+    observer.disconnect()
   })
 
   paint()

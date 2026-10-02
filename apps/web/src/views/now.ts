@@ -26,11 +26,11 @@ register('now', (_route, container) => {
   emptyMark.innerHTML = `<span class="logo-base">${appLogoLive(84)}</span><span class="logo-ink">${appLogoLive(84)}</span>`
   const emptyActions = h('div', { className: 'now-idle-actions' })
   const emptyPrimary = h('a', { className: 'btn btn-primary', href: link('/charts') })
-  emptyPrimary.innerHTML = `${svgIcon('trend', 16)}<span>Ver tendencias</span>`
+  emptyPrimary.innerHTML = `${svgIcon('trend', 16)}<span>${t('Ver tendencias')}</span>`
   const emptyLikes = h('a', { className: 'btn btn-ghost', href: link('/likes') })
-  emptyLikes.innerHTML = `${svgIcon('heart', 16)}<span>Tus favoritos</span>`
+  emptyLikes.innerHTML = `${svgIcon('heart', 16)}<span>${t('Tus favoritos')}</span>`
   const emptySearch = h('a', { className: 'btn btn-ghost', href: link('/search') })
-  emptySearch.innerHTML = `${svgIcon('search', 16)}<span>Buscar</span>`
+  emptySearch.innerHTML = `${svgIcon('search', 16)}<span>${t('Buscar')}</span>`
   emptyActions.append(emptyPrimary, emptyLikes, emptySearch)
   const empty = h('div', { className: 'now-idle' }, [
     emptyMark,
@@ -90,10 +90,10 @@ register('now', (_route, container) => {
   const likeBtn = h('button', { className: 'icon-btn', title: t('Favorito'), 'aria-label': t('Favorito') })
   likeBtn.innerHTML = svgIcon('heart', 20)
   const radioBtn = h('button', { className: 'btn btn-ghost btn-sm' })
-  radioBtn.innerHTML = `${svgIcon('radio', 16)}<span>Radio</span>`
+  radioBtn.innerHTML = `${svgIcon('radio', 16)}<span>${t('Radio')}</span>`
   const rateBtn = h('button', { className: 'btn btn-ghost btn-sm' }, '1×')
   const sleepBtn = h('button', { className: 'btn btn-ghost btn-sm' })
-  sleepBtn.innerHTML = `${svgIcon('moon', 16)}<span>Temporizador</span>`
+  sleepBtn.innerHTML = `${svgIcon('moon', 16)}<span>${t('Temporizador')}</span>`
   const moreBtn = h('button', { className: 'icon-btn', title: t('Más opciones'), 'aria-label': t('Más opciones') })
   moreBtn.innerHTML = svgIcon('more', 20)
   extras.append(likeBtn, radioBtn, rateBtn, sleepBtn, moreBtn)
@@ -151,8 +151,8 @@ register('now', (_route, container) => {
     stats.replaceChildren()
     const parts: string[] = []
     if (track.genre) parts.push(track.genre)
-    parts.push(`${fmtCount(track.playback_count)} plays`)
-    parts.push(`${fmtCount(track.likes_count)} favoritos`)
+    parts.push(t('{count} plays', { count: fmtCount(track.playback_count) }))
+    parts.push(t('{count} favoritos', { count: fmtCount(track.likes_count) }))
     if (track.display_date) parts.push(timeAgo(track.display_date))
     stats.appendChild(h('span', { className: 'text-dim' }, parts.join(' · ')))
     timeTotal.textContent = fmtTime(track.duration)
@@ -167,7 +167,7 @@ register('now', (_route, container) => {
     upNextList.replaceChildren()
     if (upcoming.length === 0) {
       upNextList.appendChild(
-        h('p', { className: 'text-faint' }, getSettings().autoplay ? 'Al terminar seguirá la radio automática.' : t('La cola se acaba aquí.')),
+        h('p', { className: 'text-faint' }, getSettings().autoplay ? t('Al terminar seguirá la radio automática.') : t('La cola se acaba aquí.')),
       )
       return
     }
@@ -202,9 +202,9 @@ register('now', (_route, container) => {
     repeatBtn.innerHTML = svgIcon(state.repeat === 'one' ? 'repeatOne' : 'repeat', 20)
     likeBtn.dataset.liked = String(state.isLiked)
     likeBtn.innerHTML = svgIcon(state.isLiked ? 'heartFill' : 'heart', 20)
-    likeBtn.title = state.isLiked ? 'Quitar de favoritos' : t('Guardar en favoritos')
+    likeBtn.title = state.isLiked ? t('Quitar de favoritos') : t('Guardar en favoritos')
     rateBtn.textContent = `${state.rate}×`
-    rateBtn.title = `Velocidad de reproducción: ${state.rate}×`
+    rateBtn.title = t('Velocidad de reproducción: {rate}×', { rate: state.rate })
     sleepBtn.classList.toggle('active', state.sleepAt !== null)
     kicker.textContent = state.radioLoading
       ? t('Buscando radio…')
@@ -250,11 +250,11 @@ register('now', (_route, container) => {
   })
   sleepBtn.addEventListener('click', () => {
     const entries: MenuEntry[] = [15, 30, 60, 120].map((minutes) => ({
-      label: `Pausar en ${minutes} min`,
+      label: t('Pausar en {minutes} min', { minutes }),
       icon: 'moon',
       onSelect: () => {
         player.setSleepTimer(minutes)
-        toast(`Se pausará en ${minutes} minutos`, 'ok')
+        toast(t('Se pausará en {minutes} minutos', { minutes }), 'ok')
       },
     }))
     if (player.store.get().sleepAt !== null) {
@@ -273,12 +273,12 @@ register('now', (_route, container) => {
     const current = player.store.get().current
     const entries: MenuEntry[] = [
       {
-        label: getSettings().autoplay ? 'Desactivar radio infinita' : t('Activar radio infinita'),
+        label: getSettings().autoplay ? t('Desactivar radio infinita') : t('Activar radio infinita'),
         icon: 'radio',
         onSelect: () => {
           const next = !getSettings().autoplay
           updateSettings({ autoplay: next })
-          toast(next ? 'Radio infinita activada' : t('Radio infinita desactivada'))
+          toast(next ? t('Radio infinita activada') : t('Radio infinita desactivada'))
         },
       },
       { label: t('Ver la cola'), icon: 'queue', onSelect: () => navigate('/queue') },
@@ -288,7 +288,7 @@ register('now', (_route, container) => {
         entries.push(
           'separator',
           {
-            label: isReposted(current.id) ? 'Quitar el repost' : t('Repostear'),
+            label: isReposted(current.id) ? t('Quitar el repost') : t('Repostear'),
             icon: 'repost',
             onSelect: () => void toggleRepost(current),
           },

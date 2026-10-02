@@ -46,7 +46,7 @@ Un regalo para la comunidad de SoundCloud. MIT, para quien lo quiera, como se hi
 
 ## 📦 Instalar
 
-**Todavía no hay binarios publicados.** El primer release de macOS saldrá de [`.github/workflows/release.yml`](./.github/workflows/release.yml) al etiquetar una versión; hasta entonces, compilarlo son tres comandos:
+**Todavía no hay binarios publicados.** El primer release de macOS y Windows saldrá de [`.github/workflows/release.yml`](./.github/workflows/release.yml) al etiquetar una versión; hasta entonces, compilarlo son tres comandos (Node ≥ 22.18, recomendado Node 24):
 
 ```bash
 git clone https://github.com/gaboxdev/soundcloudapp.git
@@ -144,10 +144,11 @@ Detalles técnicos en [AGENTS.md](./AGENTS.md).
 
 - [x] Cuenta y sincronización de likes (resuelto con el login nativo en la webview, sin OAuth)
 - [x] Modo invitado en la versión web («Explorar sin cuenta», favoritos locales)
-- [ ] Estaciones de radio (artist station)
+- [x] Estaciones de radio de tracks y artistas
 - [ ] Más tamaños de arte (CDN) y opción de calidad
 - [ ] Versión móvil nativa
-- [ ] Compilados para Windows/Linux
+- [x] Flujo de compilados para macOS y Windows (publicación pendiente)
+- [ ] Compilados y validación para Linux
 - [x] Soporte de idiomas (español e inglés, cambio en caliente)
 
 ¿Ideas? Abre un issue o un PR — este proyecto es tuyo también.
@@ -170,7 +171,7 @@ Antes de abrir el primer issue, el [código de conducta](./CODE_OF_CONDUCT.md) c
 
 «SoundCloud» es una marca registrada de SoundCloud Global Limited & Co. KG. Sus marcas, logotipos y contenido pertenecen a sus respectivos dueños y aquí se mencionan únicamente de forma descriptiva, para indicar con qué servicio funciona este cliente. SoundClear no usa el nombre ni el logotipo de SoundCloud como identidad propia: tiene su propio nombre y su propia marca.
 
-SoundClear solo accede a endpoints públicos que el propio sitio web de SoundCloud utiliza, y no aloja, redistribuye ni descarga contenido protegido salvo cuando el propio autor lo habilita en SoundCloud. Licencia [MIT](./LICENSE).
+SoundClear consulta endpoints de SoundCloud, incluidos los de tu cuenta cuando inicias sesión. El audio se reproduce desde sus servidores; la opción sin conexión guarda audio reproducible en el dispositivo y la descarga de archivos usa el permiso `downloadable` del track. La app no reproduce medios cifrados con DRM. Licencia [MIT](./LICENSE).
 
 ---
 

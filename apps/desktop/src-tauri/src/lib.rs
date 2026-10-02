@@ -20,7 +20,9 @@ use tauri_plugin_notification::NotificationExt;
 use tokio::sync::oneshot;
 use url::Url;
 
-const CLIENT_ID_TTL: Duration = Duration::from_secs(20 * 60);
+const CLIENT_ID_TTL: Duration = Duration::from_secs(15 * 60);
+const CLIENT_ID_REFRESH_COOLDOWN: Duration = Duration::from_secs(15);
+const API_HOST: &str = "api-v2.soundcloud.com";
 const BRIDGE_LABEL: &str = "sl-bridge";
 const BRIDGE_BASE_URL: &str = "https://soundcloud.com/robots.txt";
 const LOGIN_LABEL: &str = "sl-login";
@@ -38,16 +40,23 @@ const HTTP_TIMEOUT: Duration = Duration::from_secs(15);
 const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const BRIDGE_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_ASSET_BUNDLES: usize = 6;
+const MAX_DOWNLOAD_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_DOWNLOAD_REDIRECTS: usize = 8;
 
 static POPUP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(1);
+static MAIN_WINDOW_LOCK: LazyLock<tokio::sync::Mutex<()>> =
+    LazyLock::new(|| tokio::sync::Mutex::new(()));
+static MINI_WINDOW_LOCK: LazyLock<tokio::sync::Mutex<()>> =
+    LazyLock::new(|| tokio::sync::Mutex::new(()));
 
 static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
         .timeout(HTTP_TIMEOUT)
         .connect_timeout(HTTP_CONNECT_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
         .build()
-        .unwrap_or_else(|_| reqwest::Client::new())
+        .expect("no se pudo construir el cliente HTTP seguro")
 });
 
 static BRIDGE_NONCE: LazyLock<String> = LazyLock::new(|| {
@@ -65,6 +74,15 @@ static SECRET_PATTERNS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| 
         (r"(?i)(client_id=)[A-Za-z0-9_\-]+", "${1}oculto"),
         (r"(?i)(oauth_token=)[^&;\s]+", "${1}oculto"),
         (r"(?i)(OAuth\s+)[A-Za-z0-9._\-]+", "${1}oculto"),
+        (r"(?i)(Bearer\s+)[A-Za-z0-9._~+/=-]+", "${1}oculto"),
+        (
+            r"(?i)([?#&](?:code|state|access_token|refresh_token|id_token)=)[^&#\s]+",
+            "${1}oculto",
+        ),
+        (
+            r#"(?i)((?:authorization|access_token|refresh_token|id_token|code|state)\s*[:=]\s*['\"]?)[^&;\s,'\"]+"#,
+            "${1}oculto",
+        ),
         (r#"(?i)("client_id"\s*:\s*")[^"]*"#, "${1}oculto"),
         (r#"(?i)(client_id:")[^"]*"#, "${1}oculto"),
     ]
@@ -103,7 +121,11 @@ static SCRIPT_CLIENT_ID_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
 static ASSET_URL_PATTERN: LazyLock<Option<Regex>> =
     LazyLock::new(|| Regex::new(r#"https://a-v2\.sndcdn\.com/assets/[A-Za-z0-9._\-]+\.js"#).ok());
 
-struct ClientIdState(Mutex<Option<(String, Instant)>>);
+struct ClientIdState {
+    cache: Mutex<Option<(String, Instant)>>,
+    refreshed_at: Mutex<Option<Instant>>,
+    refresh_lock: tokio::sync::Mutex<()>,
+}
 
 struct PendingRequest {
     id: u64,
@@ -179,6 +201,62 @@ fn query_of(url: &str) -> HashMap<String, String> {
     url.split_once('?')
         .map(|(_, query)| parse_query(query))
         .unwrap_or_default()
+}
+
+fn validate_api_url(value: &str) -> Result<Url, String> {
+    let parsed = Url::parse(value).map_err(|_| "URL de API invÃ¡lida".to_string())?;
+    let valid_port = parsed.port().map_or(true, |port| port == 443);
+    if parsed.scheme() != "https"
+        || parsed.host_str() != Some(API_HOST)
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || !valid_port
+    {
+        return Err("solo se permite https://api-v2.soundcloud.com sin credenciales ni puertos no estÃ¡ndar".to_string());
+    }
+    Ok(parsed)
+}
+
+fn normalize_authed_method(method: &str) -> Result<String, String> {
+    let normalized = method.to_ascii_uppercase();
+    match normalized.as_str() {
+        "GET" | "POST" | "PUT" | "DELETE" | "PATCH" => Ok(normalized),
+        _ => Err("mÃ©todo no permitido para solicitudes autenticadas".to_string()),
+    }
+}
+
+fn is_soundcloud_ready_url(url: &Url) -> bool {
+    let valid_port = url.port().map_or(true, |port| port == 443);
+    url.scheme() == "https"
+        && url.host_str() == Some("soundcloud.com")
+        && url.username().is_empty()
+        && url.password().is_none()
+        && valid_port
+}
+
+fn valid_bridge_query(query: &HashMap<String, String>, require_body: bool) -> Option<u64> {
+    if query.get("nonce").map(String::as_str) != Some(BRIDGE_NONCE.as_str()) {
+        return None;
+    }
+    let id = query.get("id")?.parse::<u64>().ok()?;
+    if id == 0 || query.get("status")?.parse::<u16>().is_err() {
+        return None;
+    }
+    if require_body && !query.contains_key("body") {
+        return None;
+    }
+    Some(id)
+}
+
+fn is_exact_bridge_fallback_url(url: &Url, base: &Url) -> bool {
+    let same_origin = url.scheme() == base.scheme()
+        && url.host_str() == base.host_str()
+        && url.port_or_known_default() == base.port_or_known_default()
+        && url.username().is_empty()
+        && url.password().is_none();
+    same_origin
+        && url.path() == "/auth-bridge"
+        && valid_bridge_query(&url.query().map(parse_query).unwrap_or_default(), true).is_some()
 }
 
 fn close_login_windows_in(app: &AppHandle) {
@@ -284,6 +362,10 @@ fn allow_popup(
     app: AppHandle,
 ) -> impl Fn(Url, NewWindowFeatures) -> NewWindowResponse<tauri::Wry> + Send + 'static {
     move |url, features| {
+        if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() {
+            debug_log("popup bloqueado: protocolo o credenciales no permitidos");
+            return NewWindowResponse::Deny;
+        }
         let index = POPUP_COUNTER.fetch_add(1, Ordering::Relaxed);
         let label = format!("{POPUP_PREFIX}-{index}");
         let builder = WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url))
@@ -371,22 +453,49 @@ async fn fetch_client_id() -> Result<String, String> {
 }
 
 async fn resolve_client_id(state: &ClientIdState, refresh: bool) -> Result<String, String> {
-    if !refresh {
-        let guard = lock_or_recover(&state.0);
+    {
+        let guard = lock_or_recover(&state.cache);
         if let Some((id, fetched_at)) = &*guard {
-            if fetched_at.elapsed() < CLIENT_ID_TTL {
+            if !refresh && fetched_at.elapsed() < CLIENT_ID_TTL {
+                return Ok(id.clone());
+            }
+            if refresh
+                && lock_or_recover(&state.refreshed_at)
+                    .as_ref()
+                    .is_some_and(|refreshed_at| refreshed_at.elapsed() < CLIENT_ID_REFRESH_COOLDOWN)
+            {
                 return Ok(id.clone());
             }
         }
     }
+
+    let _refresh_guard = state.refresh_lock.lock().await;
+    {
+        let guard = lock_or_recover(&state.cache);
+        if let Some((id, fetched_at)) = &*guard {
+            if !refresh && fetched_at.elapsed() < CLIENT_ID_TTL {
+                return Ok(id.clone());
+            }
+            if refresh
+                && lock_or_recover(&state.refreshed_at)
+                    .as_ref()
+                    .is_some_and(|refreshed_at| refreshed_at.elapsed() < CLIENT_ID_REFRESH_COOLDOWN)
+            {
+                return Ok(id.clone());
+            }
+        }
+    }
+
     let id = fetch_client_id().await?;
-    *lock_or_recover(&state.0) = Some((id.clone(), Instant::now()));
+    let now = Instant::now();
+    *lock_or_recover(&state.cache) = Some((id.clone(), now));
+    *lock_or_recover(&state.refreshed_at) = Some(now);
     Ok(id)
 }
 
 fn cached_client_id(app: &AppHandle) -> String {
     let state = app.state::<ClientIdState>();
-    let guard = lock_or_recover(&state.0);
+    let guard = lock_or_recover(&state.cache);
     guard
         .as_ref()
         .map(|(id, _)| id.clone())
@@ -410,16 +519,18 @@ async fn refresh_client_id(state: State<'_, ClientIdState>) -> Result<String, St
 
 #[tauri::command]
 async fn proxy_fetch(url: String, state: State<'_, ClientIdState>) -> Result<String, String> {
-    let mut final_url = url;
-    if final_url.contains("api-v2.soundcloud.com") && !final_url.contains("client_id") {
+    let mut final_url = validate_api_url(&url)?;
+    let has_client_id = final_url
+        .query_pairs()
+        .any(|(key, _)| key == "client_id");
+    if !has_client_id {
         let client_id = resolve_client_id(&state, false).await?;
-        let separator = if final_url.contains('?') { '&' } else { '?' };
-        final_url.push(separator);
-        final_url.push_str("client_id=");
-        final_url.push_str(&client_id);
+        final_url
+            .query_pairs_mut()
+            .append_pair("client_id", &client_id);
     }
     let response = HTTP_CLIENT
-        .get(&final_url)
+        .get(final_url)
         .send()
         .await
         .map_err(|error| format!("fetch upstream: {error}"))?;
@@ -453,14 +564,24 @@ fn show_main(app: &AppHandle) {
         debug_log("ventana principal: sin configuración para recrearla");
         return;
     };
-    match WebviewWindowBuilder::from_config(app, &config).and_then(|builder| builder.build()) {
-        Ok(window) => {
-            debug_log("ventana principal: recreada desde la bandeja");
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let _window_guard = MAIN_WINDOW_LOCK.lock().await;
+        if let Some(window) = app.get_webview_window(MAIN_LABEL) {
+            let _ = window.show();
+            let _ = window.unminimize();
             let _ = window.set_focus();
-            apply_window_glass(app);
+            return;
         }
-        Err(error) => debug_log(&format!("ventana principal: no se pudo recrear ({error})")),
-    }
+        match WebviewWindowBuilder::from_config(&app, &config).and_then(|builder| builder.build()) {
+            Ok(window) => {
+                debug_log("ventana principal: recreada desde la bandeja");
+                let _ = window.set_focus();
+                apply_window_glass(&app);
+            }
+            Err(error) => debug_log(&format!("ventana principal: no se pudo recrear ({error})")),
+        }
+    });
 }
 
 fn mini_slot(app: &AppHandle) -> Option<(f64, f64)> {
@@ -480,7 +601,7 @@ fn mini_slot(app: &AppHandle) -> Option<(f64, f64)> {
     Some((x, y))
 }
 
-fn open_mini(app: &AppHandle) -> Result<(), String> {
+fn open_mini_inner(app: &AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(MINI_LABEL) {
         let _ = window.show();
         let _ = window.set_focus();
@@ -516,31 +637,46 @@ fn open_mini(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn close_mini(app: &AppHandle) {
+fn close_mini_inner(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(MINI_LABEL) {
         let _ = window.close();
         debug_log("mini: ventana cerrada");
     }
 }
 
+async fn open_mini(app: &AppHandle) -> Result<(), String> {
+    let _window_guard = MINI_WINDOW_LOCK.lock().await;
+    open_mini_inner(app)
+}
+
+async fn close_mini(app: &AppHandle) {
+    let _window_guard = MINI_WINDOW_LOCK.lock().await;
+    close_mini_inner(app);
+}
+
+async fn toggle_mini_inner(app: &AppHandle) -> Result<bool, String> {
+    let _window_guard = MINI_WINDOW_LOCK.lock().await;
+    if app.get_webview_window(MINI_LABEL).is_some() {
+        close_mini_inner(app);
+        return Ok(false);
+    }
+    open_mini_inner(app)?;
+    Ok(true)
+}
+
 #[tauri::command]
-fn mini_window(app: AppHandle, show: bool) -> Result<bool, String> {
+async fn mini_window(app: AppHandle, show: bool) -> Result<bool, String> {
     if show {
-        open_mini(&app)?;
+        open_mini(&app).await?;
         return Ok(true);
     }
-    close_mini(&app);
+    close_mini(&app).await;
     Ok(false)
 }
 
 #[tauri::command]
-fn toggle_mini(app: AppHandle) -> Result<bool, String> {
-    if app.get_webview_window(MINI_LABEL).is_some() {
-        close_mini(&app);
-        return Ok(false);
-    }
-    open_mini(&app)?;
-    Ok(true)
+async fn toggle_mini(app: AppHandle) -> Result<bool, String> {
+    toggle_mini_inner(&app).await
 }
 
 #[tauri::command]
@@ -602,9 +738,12 @@ fn register_shortcuts(app: &AppHandle) {
                     return;
                 }
                 if action == "mini" {
-                    if let Err(error) = toggle_mini(handle.clone()) {
-                        debug_log(&format!("mini: error {error}"));
-                    }
+                    let handle = handle.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(error) = toggle_mini_inner(&handle).await {
+                            debug_log(&format!("mini: error {error}"));
+                        }
+                    });
                     return;
                 }
                 emit_command(handle, &action);
@@ -669,9 +808,12 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
         .on_menu_event(|handle, event| match event.id().as_ref() {
             "toggle" | "prev" | "next" => emit_command(handle, event.id().as_ref()),
             "mini" => {
-                if let Err(error) = toggle_mini(handle.clone()) {
-                    debug_log(&format!("mini: error {error}"));
-                }
+                let handle = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(error) = toggle_mini_inner(&handle).await {
+                        debug_log(&format!("mini: error {error}"));
+                    }
+                });
             }
             "show" => show_main(handle),
             "quit" => handle.exit(0),
@@ -687,23 +829,52 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
 }
 
 fn allowed_download_host(url: &str) -> bool {
-    match Url::parse(url) {
-        Ok(parsed) => {
-            if parsed.scheme() != "https" {
-                return false;
-            }
-            match parsed.host_str() {
-                Some(host) => {
-                    host == "soundcloud.com"
-                        || host.ends_with(".soundcloud.com")
-                        || host.ends_with(".sndcdn.com")
-                        || host.ends_with(".soundcloud.cloud")
-                }
-                None => false,
-            }
-        }
-        Err(_) => false,
+    Url::parse(url).map(|parsed| allowed_download_url(&parsed)).unwrap_or(false)
+}
+
+fn allowed_download_url(url: &Url) -> bool {
+    let valid_port = url.port().map_or(true, |port| port == 443);
+    if url.scheme() != "https"
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || !valid_port
+    {
+        return false;
     }
+    match url.host_str() {
+        Some(host) => {
+            host == "soundcloud.com"
+                || host.ends_with(".soundcloud.com")
+                || host.ends_with(".sndcdn.com")
+                || host.ends_with(".soundcloud.cloud")
+        }
+        None => false,
+    }
+}
+
+async fn download_response(mut url: Url) -> Result<reqwest::Response, String> {
+    for _ in 0..=MAX_DOWNLOAD_REDIRECTS {
+        if !allowed_download_url(&url) {
+            return Err("redirecciÃ³n de descarga a host no permitido".to_string());
+        }
+        let response = HTTP_CLIENT
+            .get(url.clone())
+            .send()
+            .await
+            .map_err(|error| format!("descarga: {error}"))?;
+        if !response.status().is_redirection() {
+            return Ok(response);
+        }
+        let location = response
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|value| value.to_str().ok())
+            .ok_or_else(|| "redirecciÃ³n de descarga sin destino".to_string())?;
+        url = url
+            .join(location)
+            .map_err(|_| "destino de redirecciÃ³n de descarga invÃ¡lido".to_string())?;
+    }
+    Err("demasiadas redirecciones de descarga".to_string())
 }
 
 fn safe_file_stem(name: &str) -> String {
@@ -747,6 +918,7 @@ fn extension_from(url: &str, disposition: Option<&str>) -> String {
 
 #[tauri::command]
 async fn download_to_music(app: AppHandle, url: String, name: String) -> Result<String, String> {
+    let initial_url = Url::parse(&url).map_err(|_| "URL de descarga invalida".to_string())?;
     if !allowed_download_host(&url) {
         debug_log("descarga rechazada: host no permitido");
         return Err("host no permitido para descargas".to_string());
@@ -759,13 +931,15 @@ async fn download_to_music(app: AppHandle, url: String, name: String) -> Result<
     let folder = base.join("SoundClear");
     std::fs::create_dir_all(&folder).map_err(|error| format!("crear carpeta: {error}"))?;
 
-    let response = HTTP_CLIENT
-        .get(&url)
-        .send()
-        .await
-        .map_err(|error| format!("descarga: {error}"))?;
+    let response = download_response(initial_url).await?;
     if !response.status().is_success() {
         return Err(format!("upstream HTTP {}", response.status().as_u16()));
+    }
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_DOWNLOAD_BYTES)
+    {
+        return Err("la descarga supera el tamano maximo permitido".to_string());
     }
     let disposition = response
         .headers()
@@ -776,22 +950,66 @@ async fn download_to_music(app: AppHandle, url: String, name: String) -> Result<
     let extension = extension_from(&final_url, disposition.as_deref());
     let stem = safe_file_stem(&name);
     let mut path = folder.join(format!("{stem}.{extension}"));
-    let mut attempt = 1;
-    while path.exists() && attempt < 100 {
-        path = folder.join(format!("{stem} ({attempt}).{extension}"));
-        attempt += 1;
+    let mut file = None;
+    for attempt in 0..100 {
+        let candidate = if attempt == 0 {
+            folder.join(format!("{stem}.{extension}"))
+        } else {
+            folder.join(format!("{stem} ({attempt}).{extension}"))
+        };
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(opened) => {
+                path = candidate;
+                file = Some(opened);
+                break;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(format!("crear archivo: {error}")),
+        }
     }
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|error| format!("leer descarga: {error}"))?;
-    if bytes.is_empty() {
-        return Err("la descarga llegó vacía".to_string());
+    let mut file = file.ok_or_else(|| "no hay un nombre de archivo disponible".to_string())?;
+    let mut total = 0u64;
+    let mut response = response;
+    loop {
+        let chunk = match response.chunk().await {
+            Ok(Some(chunk)) => chunk,
+            Ok(None) => break,
+            Err(error) => {
+                drop(file);
+                let _ = std::fs::remove_file(&path);
+                return Err(format!("leer descarga: {error}"));
+            }
+        };
+        let chunk_len = u64::try_from(chunk.len()).unwrap_or(u64::MAX);
+        if total.saturating_add(chunk_len) > MAX_DOWNLOAD_BYTES {
+            drop(file);
+            let _ = std::fs::remove_file(&path);
+            return Err("la descarga supera el tamano maximo permitido".to_string());
+        }
+        if let Err(error) = file.write_all(&chunk) {
+            drop(file);
+            let _ = std::fs::remove_file(&path);
+            return Err(format!("escribir archivo: {error}"));
+        }
+        total += chunk_len;
     }
-    std::fs::write(&path, &bytes).map_err(|error| format!("escribir archivo: {error}"))?;
+    if total == 0 {
+        drop(file);
+        let _ = std::fs::remove_file(&path);
+        return Err("la descarga llego vacia".to_string());
+    }
+    if let Err(error) = file.flush() {
+        drop(file);
+        let _ = std::fs::remove_file(&path);
+        return Err(format!("cerrar archivo: {error}"));
+    }
     debug_log(&format!(
         "descarga guardada ({} bytes) en {}",
-        bytes.len(),
+        total,
         path.display()
     ));
     Ok(path.to_string_lossy().to_string())
@@ -846,7 +1064,7 @@ return h;
 }}
 function check(){{
 if(done)return;
-fetch('https://api-v2.soundcloud.com/me?client_id='+CID,{{credentials:'include',headers:authHeaders()}})
+ fetch('https://api-v2.soundcloud.com/me?client_id='+CID,{{credentials:'include',redirect:'error',headers:authHeaders()}})
 .then(function(r){{
 if(r.status===200){{window.__slSucceed();}}
 else{{misses++;if(misses===5){{try{{document.title="sl-auth-"+r.status;}}catch(e){{}}}}
@@ -915,10 +1133,13 @@ fn build_bridge_script(id: u64, url_json: &str, opts: &str, base: &str) -> Strin
         bridge_result_url(),
         BRIDGE_NONCE.as_str()
     ));
-    let fallback_json = json_string(&format!("{base}/auth-bridge"));
+    let fallback_json = json_string(&format!(
+        "{base}/auth-bridge?nonce={}",
+        BRIDGE_NONCE.as_str()
+    ));
     format!(
         "(function(){{var ID={id};var RESULT={result};var FALLBACK={fallback};var sent=false;\
-function fallback(status,text){{if(sent)return;sent=true;try{{window.location.href=FALLBACK+'?id='+ID+'&status='+status+'&body='+encodeURIComponent(text);}}catch(e){{}}}}\
+ function fallback(status,text){{if(sent)return;sent=true;try{{window.location.href=FALLBACK+'&id='+ID+'&status='+status+'&body='+encodeURIComponent(text);}}catch(e){{}}}}\
 function deliver(status,text){{try{{fetch(RESULT+'&id='+ID+'&status='+status,{{method:'POST',body:text}}).then(function(r){{if(r&&r.ok){{sent=true;}}else{{fallback(status,text);}}}},function(){{fallback(status,text);}});}}catch(e){{fallback(status,text);}}}}\
 var h={{}};try{{var cs=document.cookie.split('; '),i=0;for(;i<cs.length;i++){{var kv=cs[i].indexOf('='),k=cs[i].slice(0,kv);if(k==='oauth_token'){{h.Authorization='OAuth '+decodeURIComponent(cs[i].slice(kv+1));}}}}}}catch(e){{}}h['Content-Type']='application/json';\
 fetch({url},{opts}).then(function(r){{return r.text().then(function(t){{deliver(r.status,t);}});}}).catch(function(e){{deliver(0,String(e));}});}})();",
@@ -1037,6 +1258,8 @@ async fn authed_request(
     url: String,
     body: Option<serde_json::Value>,
 ) -> Result<String, String> {
+    let validated_url = validate_api_url(&url)?;
+    let method = normalize_authed_method(&method)?;
     let window = app
         .get_webview_window(BRIDGE_LABEL)
         .ok_or_else(|| "puente de sesión no disponible".to_string())?;
@@ -1050,7 +1273,7 @@ async fn authed_request(
 
     let base = app_base_url(&app);
     let method_json = serde_json::to_string(&method).map_err(|error| error.to_string())?;
-    let url_json = serde_json::to_string(&url).map_err(|error| error.to_string())?;
+    let url_json = serde_json::to_string(validated_url.as_str()).map_err(|error| error.to_string())?;
     let has_body = match &body {
         Some(value) if !value.is_null() => true,
         _ => false,
@@ -1063,13 +1286,13 @@ async fn authed_request(
 
     let opts = if has_body {
         format!(
-            "{{method:{method},credentials:'include',headers:h,body:{body}}}",
+            "{{method:{method},credentials:'include',redirect:'error',headers:h,body:{body}}}",
             method = method_json,
             body = body_js,
         )
     } else {
         format!(
-            "{{method:{method},credentials:'include',headers:h}}",
+            "{{method:{method},credentials:'include',redirect:'error',headers:h}}",
             method = method_json,
         )
     };
@@ -1106,7 +1329,7 @@ async fn authed_request(
             Err(error) => error,
         };
 
-        debug_log(&format!("authed: fallo id {id}: {failure}"));
+        debug_log(&format!("authed: fallo id {id}"));
         if attempt == 0 {
             state.ready.store(false, Ordering::SeqCst);
             navigate_bridge(&window);
@@ -1187,7 +1410,11 @@ pub fn run() {
     let bridge_for_protocol = bridge_state.clone();
 
     tauri::Builder::default()
-        .manage(ClientIdState(Mutex::new(None)))
+        .manage(ClientIdState {
+            cache: Mutex::new(None),
+            refreshed_at: Mutex::new(None),
+            refresh_lock: tokio::sync::Mutex::new(()),
+        })
         .manage(bridge_state)
         .manage(NativeState {
             shortcuts: Mutex::new(Vec::new()),
@@ -1205,19 +1432,21 @@ pub fn run() {
             if request.method() == "OPTIONS" {
                 return cors_response(204);
             }
+            if request.method() != "POST" {
+                return cors_response(405);
+            }
             if context.webview_label() != BRIDGE_LABEL {
                 debug_log("bridge_result: origen no autorizado");
                 return cors_response(403);
             }
-            let query = request.uri().query().map(parse_query).unwrap_or_default();
-            if query.get("nonce").map(String::as_str) != Some(BRIDGE_NONCE.as_str()) {
-                debug_log("bridge_result: nonce inválido");
+            if request.uri().path() != "/resultado" {
                 return cors_response(403);
             }
-            let id = query
-                .get("id")
-                .and_then(|value| value.parse::<u64>().ok())
-                .unwrap_or(0);
+            let query = request.uri().query().map(parse_query).unwrap_or_default();
+            let Some(id) = valid_bridge_query(&query, false) else {
+                debug_log("bridge_result: nonce inválido");
+                return cors_response(403);
+            };
             let status = query.get("status").cloned().unwrap_or_else(|| "0".into());
             let text = String::from_utf8_lossy(request.body()).into_owned();
             debug_log(&format!(
@@ -1239,6 +1468,9 @@ pub fn run() {
             let bridge_url = BRIDGE_BASE_URL
                 .parse::<Url>()
                 .map_err(|error| error.to_string())?;
+            let bridge_base = app_base_url(app.handle())
+                .parse::<Url>()
+                .map_err(|error| error.to_string())?;
             WebviewWindowBuilder::new(app, BRIDGE_LABEL, WebviewUrl::External(bridge_url))
                 .title("")
                 .inner_size(320.0, 240.0)
@@ -1254,14 +1486,20 @@ pub fn run() {
                     if payload.event() != PageLoadEvent::Finished {
                         return;
                     }
-                    if url.contains("auth-bridge") {
+                    let parsed = match Url::parse(&url) {
+                        Ok(parsed) => parsed,
+                        Err(_) => return,
+                    };
+                    if is_exact_bridge_fallback_url(&parsed, &bridge_base) {
                         state_for_window.ready.store(false, Ordering::SeqCst);
                         let query = query_of(&url);
-                        let id = query
-                            .get("id")
-                            .and_then(|value| value.parse::<u64>().ok())
-                            .unwrap_or(0);
-                        let status = query.get("status").cloned().unwrap_or_else(|| "0".into());
+                        let Some(id) = valid_bridge_query(&query, true) else {
+                            return;
+                        };
+                        let status = query
+                            .get("status")
+                            .cloned()
+                            .unwrap_or_else(|| "0".into());
                         let body = query.get("body").cloned().unwrap_or_default();
                         debug_log(&format!(
                             "auth-bridge (navegación): id {id} status {status} ({} bytes)",
@@ -1282,7 +1520,7 @@ pub fn run() {
                     }
                     state_for_window
                         .ready
-                        .store(url.contains("soundcloud.com"), Ordering::SeqCst);
+                        .store(is_soundcloud_ready_url(&parsed), Ordering::SeqCst);
                 })
                 .build()?;
 
@@ -1322,22 +1560,22 @@ pub fn run() {
                 } else {
                     debug_log("SELFTEST: bandeja AUSENTE");
                 }
-                match open_mini(app.handle()) {
-                    Ok(()) => {
-                        std::thread::sleep(Duration::from_millis(700));
-                        if let Some(mini) = app.get_webview_window(MINI_LABEL) {
-                            debug_log(&format!(
-                                "SELFTEST: mini visible={:?} tamaño={:?} posición={:?}",
-                                mini.is_visible().unwrap_or(false),
-                                mini.outer_size().ok(),
-                                mini.outer_position().ok()
-                            ));
-                        }
-                    }
-                    Err(error) => debug_log(&format!("SELFTEST: mini error {error}")),
-                }
                 let app_for_test = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
+                    match open_mini(&app_for_test).await {
+                        Ok(()) => {
+                            tokio::time::sleep(Duration::from_millis(700)).await;
+                            if let Some(mini) = app_for_test.get_webview_window(MINI_LABEL) {
+                                debug_log(&format!(
+                                    "SELFTEST: mini visible={:?} tamaño={:?} posición={:?}",
+                                    mini.is_visible().unwrap_or(false),
+                                    mini.outer_size().ok(),
+                                    mini.outer_position().ok()
+                                ));
+                            }
+                        }
+                        Err(error) => debug_log(&format!("SELFTEST: mini error {error}")),
+                    }
                     tokio::time::sleep(Duration::from_secs(2)).await;
                     match resolve_client_id(&app_for_test.state::<ClientIdState>(), false).await {
                         Ok(client_id) => debug_log(&format!(
@@ -1452,4 +1690,87 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error al ejecutar SoundClear");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn api_urls_require_the_exact_https_host() {
+        assert!(validate_api_url("https://api-v2.soundcloud.com/me").is_ok());
+        assert!(validate_api_url("https://api-v2.soundcloud.com:443/me").is_ok());
+        assert!(validate_api_url("https://api-v2.soundcloud.com:444/me").is_err());
+        assert!(validate_api_url("https://user:pass@api-v2.soundcloud.com/me").is_err());
+        assert!(validate_api_url("https://api-v2.soundcloud.com.evil.test/me").is_err());
+        assert!(validate_api_url("http://api-v2.soundcloud.com/me").is_err());
+    }
+
+    #[test]
+    fn download_urls_reject_credentials_and_nonstandard_ports() {
+        assert!(allowed_download_host("https://cf-media.sndcdn.com/track.mp3"));
+        assert!(allowed_download_host("https://cf-media.sndcdn.com:443/track.mp3"));
+        assert!(!allowed_download_host("https://cf-media.sndcdn.com:444/track.mp3"));
+        assert!(!allowed_download_host("https://user:pass@cf-media.sndcdn.com/track.mp3"));
+        assert!(!allowed_download_host("http://cf-media.sndcdn.com/track.mp3"));
+    }
+
+    #[test]
+    fn bridge_fallback_requires_local_origin_nonce_id_and_body() {
+        let base = Url::parse("http://tauri.localhost").expect("base URL");
+        let nonce = BRIDGE_NONCE.as_str();
+        let good = Url::parse(&format!(
+            "http://tauri.localhost/auth-bridge?nonce={nonce}&id=7&status=200&body=%7B%7D"
+        ))
+        .expect("fallback URL");
+        assert!(is_exact_bridge_fallback_url(&good, &base));
+
+        let wrong_origin = Url::parse(&format!(
+            "http://evil.test/auth-bridge?nonce={nonce}&id=7&status=200&body=%7B%7D"
+        ))
+        .expect("wrong origin URL");
+        assert!(!is_exact_bridge_fallback_url(&wrong_origin, &base));
+
+        let missing_id = Url::parse(&format!(
+            "http://tauri.localhost/auth-bridge?nonce={nonce}&status=200&body=%7B%7D"
+        ))
+        .expect("missing id URL");
+        assert!(!is_exact_bridge_fallback_url(&missing_id, &base));
+    }
+
+    #[test]
+    fn bridge_readiness_requires_exact_soundcloud_origin() {
+        assert!(is_soundcloud_ready_url(
+            &Url::parse("https://soundcloud.com/robots.txt").expect("soundcloud URL")
+        ));
+        assert!(!is_soundcloud_ready_url(
+            &Url::parse("https://evil.soundcloud.com/robots.txt").expect("subdomain URL")
+        ));
+        assert!(!is_soundcloud_ready_url(
+            &Url::parse("https://soundcloud.com.evil.test/robots.txt").expect("suffix URL")
+        ));
+        assert!(!is_soundcloud_ready_url(
+            &Url::parse("https://user@soundcloud.com/robots.txt").expect("userinfo URL")
+        ));
+    }
+
+    #[test]
+    fn logs_redact_oauth_url_parameters_and_authorization_tokens() {
+        let value = redact(
+            "https://soundcloud.com/callback?code=code-secret&state=state-secret&access_token=access-secret Bearer bearer-secret",
+        );
+        assert!(!value.contains("code-secret"));
+        assert!(!value.contains("state-secret"));
+        assert!(!value.contains("access-secret"));
+        assert!(!value.contains("bearer-secret"));
+        assert!(value.contains("oculto"));
+    }
+
+    #[test]
+    fn authenticated_methods_are_limited_to_supported_verbs() {
+        assert_eq!(normalize_authed_method("get").expect("GET"), "GET");
+        assert_eq!(normalize_authed_method("PATCH").expect("PATCH"), "PATCH");
+        assert!(normalize_authed_method("OPTIONS").is_err());
+        assert!(normalize_authed_method("TRACE").is_err());
+    }
 }

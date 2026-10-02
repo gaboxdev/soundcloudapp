@@ -15,11 +15,12 @@
     "build": "npm run build -w apps/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "preview": "npm run preview -w apps/web",
-    "test": "node --test \"apps/web/test/*.test.ts\"",
+    "test": "node --import ./apps/web/test/runtime.ts --test \"apps/web/test/*.test.ts\" \"packages/soundcloud-api/test/*.test.ts\" \"proxy/test/*.test.ts\"",
     "probe": "node scripts/api-probe.mjs",
-    "i18n": "node scripts/i18n-audit.mjs"
+    "i18n": "node scripts/i18n-audit.mjs",
+    "release:check": "node scripts/check-release.mjs"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18.0"
   }
 }

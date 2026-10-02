@@ -41,7 +41,7 @@ function albumCard(item: PlaylistSummary): HTMLElement {
   card.appendChild(artEl(item.artwork_url, item.title, { size: 't500x500' }))
   const meta = h('div', { className: 'pl-meta' })
   meta.appendChild(h('div', { className: 'pl-title truncate' }, item.title))
-  const kind = item.is_album === true || item.set_type === 'album' ? 'Álbum' : t('Playlist')
+  const kind = item.is_album === true || item.set_type === 'album' ? t('Álbum') : t('Playlist')
   meta.appendChild(h('div', { className: 'pl-count text-faint truncate' }, `${kind} · ${item.track_count ?? 0} tracks · ${item.user?.username ?? ''}`))
   card.appendChild(meta)
   return card
@@ -68,12 +68,12 @@ register('explore', (_route, container) => {
           const semilla = res.collection.find((track) => track && typeof track.id === 'number')
           if (!semilla) throw new Error('sin semilla')
           await player.startRadio(semilla)
-          toast(`Radio de ${t(genre.label)} en marcha`, 'ok')
+          toast(t('Radio de {genre} en marcha', { genre: t(genre.label) }), 'ok')
         })
-        .catch(() => toastErr(`No se pudo arrancar la radio de ${t(genre.label)}`))
+        .catch(() => toastErr(t('No se pudo arrancar la radio de {genre}', { genre: t(genre.label) })))
         .finally(() => {
           chip.disabled = false
-          chip.textContent = genre.label
+          chip.textContent = t(genre.label)
         })
     })
     chips.appendChild(chip)
@@ -132,7 +132,7 @@ register('explore', (_route, container) => {
     similar.body.replaceChildren(vacio(t('Escucha algo y aquí aparecerá lo que se le parece.')))
   } else {
     similar.body.insertBefore(
-      h('p', { className: 'text-faint explore-hint' }, `A partir de «${semilla.title}»`),
+      h('p', { className: 'text-faint explore-hint' }, t('A partir de «{title}»', { title: semilla.title })),
       similarList,
     )
     void api
@@ -152,7 +152,7 @@ register('explore', (_route, container) => {
         })
         const playAll = h('button', { className: 'btn btn-ghost btn-sm', type: 'button' })
         playAll.appendChild(iconEl('play', 16))
-        playAll.appendChild(document.createTextNode(`Reproducir los ${frescos.length} (${fmtCount(frescos.length)} nuevos)`))
+        playAll.appendChild(document.createTextNode(t('Reproducir los {count} ({newCount} nuevos)', { count: frescos.length, newCount: fmtCount(frescos.length) })))
         playAll.addEventListener('click', () => player.playQueue(frescos, 0))
         similar.body.appendChild(playAll)
       })

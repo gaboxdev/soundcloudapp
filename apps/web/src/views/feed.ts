@@ -12,6 +12,7 @@ import { skFeedItems, skMore } from '../ui/skeleton'
 import { toastErr } from '../ui/toast'
 import './feed.css'
 import { t } from '../core/i18n.ts'
+import { onDetach } from '../core/lifecycle'
 
 const PAGE_SIZE = 20
 const SCROLL_MARGIN = 280
@@ -19,7 +20,7 @@ const SCROLL_MARGIN = 280
 export function postReason(post: StreamPost): string {
   const who = post.user?.username ?? t('Alguien')
   const when = timeAgo(post.created_at)
-  const verb = post.type.includes('repost') ? 'reposteó' : t('publicó')
+  const verb = post.type.includes('repost') ? t('reposteó') : t('publicó')
   return when ? `${who} ${verb} · ${when}` : `${who} ${verb}`
 }
 
@@ -45,7 +46,7 @@ function playlistPostEl(post: StreamPost, playlist: Playlist): HTMLElement {
   const titleLine = h('div', { className: 'title-line' })
   titleLine.appendChild(h('span', { className: 'title truncate' }, playlist.title))
   const isAlbum = playlist.is_album === true || playlist.set_type === 'album'
-  titleLine.appendChild(h('span', { className: 'kind-badge' }, isAlbum ? 'Álbum' : t('Playlist')))
+  titleLine.appendChild(h('span', { className: 'kind-badge' }, isAlbum ? t('Álbum') : t('Playlist')))
   meta.appendChild(titleLine)
   meta.appendChild(
     h('div', { className: 'sub text-dim truncate' }, `${playlist.track_count ?? 0} tracks · ${playlist.user?.username ?? ''}`),
@@ -67,7 +68,8 @@ register('feed', (_route, container) => {
 
   const toolbar = h('div', { className: 'page-toolbar' })
   const refreshBtn = h('button', { className: 'btn btn-ghost btn-sm' })
-  refreshBtn.innerHTML = `${svgIcon('refresh', 16)}<span>Actualizar</span>`
+  refreshBtn.innerHTML = svgIcon('refresh', 16)
+  refreshBtn.appendChild(h('span', null, t('Actualizar')))
   const playAllBtn = labelBtn('btn btn-ghost btn-sm', 'play', t('Reproducir lo nuevo')).btn
   toolbar.append(refreshBtn, playAllBtn)
   page.appendChild(toolbar)
@@ -84,6 +86,8 @@ register('feed', (_route, container) => {
   let loading = false
   let done = false
   let rendered = 0
+  let generation = 0
+  let activeAccount = accountStore.get().user?.id ?? null
 
   const observer = new IntersectionObserver(
     (entries) => {
@@ -176,6 +180,9 @@ register('feed', (_route, container) => {
     if (loading || done || !container.isConnected) return
     if (!hasAccount()) return
     loading = true
+    const current = generation
+    const userId = accountStore.get().user?.id ?? null
+    const valid = (): boolean => current === generation && container.isConnected && hasAccount() && accountStore.get().user?.id === userId
     const first = !started
     if (first) {
       list.replaceChildren(...skFeedItems(5))
@@ -184,24 +191,26 @@ register('feed', (_route, container) => {
     }
     try {
       const response = await getAPI().stream(PAGE_SIZE, next)
-      if (!container.isConnected) return
+      if (!valid()) return
       if (first) list.replaceChildren()
       started = true
       next = response.next_href
       const added = appendPosts(response.collection)
       done = !next || (response.collection.length === 0 && added === 0)
-      count.textContent = rendered === 0 ? '' : `${rendered} publicaciones`
+      count.textContent = rendered === 0 ? '' : t('{count} publicaciones', { count: rendered })
       if (done && rendered === 0) renderEmpty()
       setToolbar(true)
     } catch {
-      if (!container.isConnected) return
+      if (!valid()) return
       done = true
       if (rendered === 0) renderError()
       else toastErr(t('No se pudieron cargar más publicaciones'))
     } finally {
-      loading = false
-      sentinel.replaceChildren()
-      if (!done) pump()
+      if (current === generation) {
+        loading = false
+        sentinel.replaceChildren()
+        if (!done) pump()
+      }
     }
   }
 
@@ -213,6 +222,7 @@ register('feed', (_route, container) => {
   }
 
   function reset(): void {
+    generation++
     tracks.length = 0
     seen.clear()
     next = null
@@ -231,6 +241,11 @@ register('feed', (_route, container) => {
   })
 
   function paint(): void {
+    const userId = hasAccount() ? accountStore.get().user?.id ?? null : null
+    if (userId !== activeAccount) {
+      activeAccount = userId
+      reset()
+    }
     if (hasAccount()) {
       setToolbar(true)
       if (!started) void load()
@@ -250,5 +265,10 @@ register('feed', (_route, container) => {
     }
     attached = true
     paint()
+  })
+  onDetach(container, () => {
+    generation++
+    unsub?.()
+    observer.disconnect()
   })
 })

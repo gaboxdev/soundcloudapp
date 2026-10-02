@@ -128,7 +128,7 @@ register('search', (route, container) => {
           role: 'tab',
           'aria-selected': current ? 'true' : 'false',
         },
-        [iconEl(def.icon, 15), h('span', { className: 'btn-label' }, def.label)],
+        [iconEl(def.icon, 15), h('span', { className: 'btn-label' }, t(def.label))],
       ),
     )
   }
@@ -221,7 +221,7 @@ register('search', (route, container) => {
             href: filterHref({ dur: active ? undefined : item.value }),
             'aria-pressed': active ? 'true' : 'false',
           },
-          item.label,
+          t(item.label),
         ),
       )
     }
@@ -239,7 +239,7 @@ register('search', (route, container) => {
             href: filterHref({ when: active ? undefined : item.value }),
             'aria-pressed': active ? 'true' : 'false',
           },
-          item.label,
+          t(item.label),
         ),
       )
     }
@@ -400,8 +400,8 @@ register('search', (route, container) => {
       if (done && rendered === 0) {
         showEmpty(
           hasFilters
-            ? `Sin resultados para «${query}» con esos filtros`
-            : `Sin resultados para «${query}» en ${tabLabel()}`,
+            ? t('Sin resultados para «{query}» con esos filtros', { query })
+            : t('Sin resultados para «{query}» en {tab}', { query, tab: tabLabel() }),
         )
       }
     } catch {
@@ -462,10 +462,10 @@ register('search', (route, container) => {
     const meta = h('div', { className: 'meta' })
     const titleLine = h('div', { className: 'title-line' })
     titleLine.appendChild(h('span', { className: 'title truncate' }, title))
-    titleLine.appendChild(h('span', { className: 'kind-badge' }, isAlbum(pl) ? 'Álbum' : t('Playlist')))
+    titleLine.appendChild(h('span', { className: 'kind-badge' }, isAlbum(pl) ? t('Álbum') : t('Playlist')))
     meta.appendChild(titleLine)
     const author = pl.user?.username ?? t('Artista desconocido')
-    meta.appendChild(h('div', { className: 'sub text-dim truncate' }, `${pl.track_count ?? 0} tracks · ${author}`))
+    meta.appendChild(h('div', { className: 'sub text-dim truncate' }, `${t('{count} tracks', { count: pl.track_count ?? 0 })} · ${author}`))
     row.appendChild(meta)
     return row
   }
@@ -481,15 +481,15 @@ register('search', (route, container) => {
       title.appendChild(badge)
     }
     meta.appendChild(title)
-    const parts = [`${fmtCount(u.followers_count)} seguidores`]
-    if (u.track_count) parts.push(`${fmtCount(u.track_count)} tracks`)
+    const parts = [t('{count} seguidores', { count: fmtCount(u.followers_count) })]
+    if (u.track_count) parts.push(t('{count} tracks', { count: fmtCount(u.track_count) }))
     meta.appendChild(h('div', { className: 'sub text-dim' }, parts.join(' · ')))
     row.appendChild(meta)
     return row
   }
 
   function tabLabel(): string {
-    return (TAB_DEFS.find((def) => def.id === tab) ?? TAB_DEFS[0]).label.toLowerCase()
+    return t((TAB_DEFS.find((def) => def.id === tab) ?? TAB_DEFS[0]).label).toLowerCase()
   }
 
   function showEmpty(message: string, withIcon = false): void {

@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { artworkUrl, clamp, esc, fmtBytes, fmtCount, fmtTime, initials, timeAgo } from '../src/core/utils.ts'
+import { artworkUrl, clamp, esc, fmtBytes, fmtCount, fmtTime, formatDate, initials, timeAgo } from '../src/core/utils.ts'
+import { loadLang } from '../src/core/i18n.ts'
 
 test('fmtTime formatea milisegundos', () => {
   assert.equal(fmtTime(0), '0:00')
@@ -62,4 +63,21 @@ test('timeAgo devuelve algo legible y no revienta con basura', () => {
   assert.match(timeAgo(hace), /min/)
   assert.equal(timeAgo(null), '')
   assert.equal(timeAgo('no-fecha'), '')
+})
+
+test('las fechas cambian de idioma sin recargar los módulos', async () => {
+  const previousNow = Date.now
+  Date.now = () => Date.UTC(2026, 9, 1, 12)
+  try {
+    const recent = new Date(Date.now() - 3 * 60 * 1000).toISOString()
+    await loadLang('en')
+    assert.equal(timeAgo(recent), '3 min ago')
+    assert.match(formatDate('2026-09-20T12:00:00Z'), /September/)
+    await loadLang('es')
+    assert.equal(timeAgo(recent), 'hace 3 min')
+    assert.match(formatDate('2026-09-20T12:00:00Z'), /septiembre/)
+  } finally {
+    Date.now = previousNow
+    await loadLang('es')
+  }
 })

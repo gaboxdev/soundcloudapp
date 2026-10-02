@@ -101,7 +101,7 @@ function playlistRow(playlist: PlaylistSummary, onPick: () => Promise<void>): HT
   const count = playlist.track_count ?? 0
   meta.append(
     h('span', { className: 'picker-title truncate' }, playlist.title),
-    h('span', { className: 'picker-sub truncate' }, `${count} ${count === 1 ? 'track' : 'tracks'}`),
+    h('span', { className: 'picker-sub truncate' }, t(count === 1 ? '{count} track' : '{count} tracks', { count })),
   )
   const status = h('span', { className: 'picker-status' })
   row.append(art, meta, status)
@@ -161,7 +161,7 @@ export function openPlaylistPicker(track: Track): void {
               toast(t('Ese track ya estaba en la playlist'))
               return
             }
-            toast(`Añadido a «${playlist.title}»`, 'ok')
+      toast(t('Añadido a «{title}»', { title: playlist.title }), 'ok')
             modal.close()
           }),
         )
@@ -190,7 +190,7 @@ export function openSaveQueue(tracks: Track[]): void {
 
   const total = tracks.length
   modal.body.append(
-    h('p', { className: 'text-dim' }, `Se guardarán ${total} ${total === 1 ? 'track' : 'tracks'} en el orden actual de la cola.`),
+    h('p', { className: 'text-dim' }, t('Se guardarán {count} {tracks} en el orden actual de la cola.', { count: total, tracks: t(total === 1 ? 'track' : 'tracks') })),
     createForm(modal, `Cola de SoundClear · ${dateLabel()}`, t('Guardar playlist'), async (title, isPublic) => {
       const created = await createPlaylistWith(
         title,
@@ -198,7 +198,7 @@ export function openSaveQueue(tracks: Track[]): void {
         isPublic,
       )
       invalidatePlaylists()
-      toast(`Playlist «${created.title}» creada con ${total} tracks`, 'ok')
+      toast(t('Playlist «{title}» creada con {count} tracks', { title: created.title, count: total }), 'ok')
       navigate(`/playlist/${created.id}`)
     }),
   )

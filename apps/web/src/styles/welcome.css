@@ -60,6 +60,7 @@ html.tour-open body {
   flex-direction: column;
   gap: 12px;
   border-radius: var(--radius-lg);
+  background-color: var(--veil-overlay);
   background-image: radial-gradient(
       120% 100% at 12% -20%,
       color-mix(in srgb, var(--accent) 26%, transparent),
@@ -199,7 +200,7 @@ html.tour-open body {
   gap: 10px;
   padding: 9px 10px;
   border-radius: var(--radius);
-  background-color: var(--veil-chrome);
+  background-color: var(--veil-floating);
   border: 1px solid var(--hairline-2);
   box-shadow: var(--edge-light);
 }
@@ -247,7 +248,7 @@ html.tour-open body {
   gap: 10px;
   padding: 24px;
   border-radius: var(--radius-lg);
-  background-color: var(--veil-panel);
+  background-color: var(--veil-overlay);
   background-image: var(--glass-sheet);
   border: 1px solid var(--hairline-2);
   box-shadow: var(--glass-shadow-lg), var(--edge-light);

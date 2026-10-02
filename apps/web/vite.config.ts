@@ -25,13 +25,15 @@ function applyCors(res: ServerResponse): void {
   for (const [key, value] of Object.entries(corsHeaders)) res.setHeader(key, value)
 }
 
-function sendJson(res: ServerResponse, status: number, body: unknown): void {
+function sendJson(res: ServerResponse, status: number, body: unknown, extraHeaders: Record<string, string> = {}): void {
   if (res.headersSent) {
     res.end()
     return
   }
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
+  res.setHeader('Cache-Control', 'no-store')
+  for (const [key, value] of Object.entries(extraHeaders)) res.setHeader(key, value)
   applyCors(res)
   res.end(JSON.stringify(body))
 }
@@ -50,6 +52,7 @@ function slProxy(): Plugin {
     configureServer(server) {
       server.middlewares.use('/sl-proxy', async (req: IncomingMessage, res: ServerResponse) => {
         if (preflight(req, res)) return
+        if (req.method !== 'GET') return sendJson(res, 405, { error: 'método no permitido' }, { Allow: 'GET, OPTIONS' })
         try {
           const params = new URL(req.url ?? '', 'http://localhost').searchParams
           const target = params.get('url')
@@ -70,8 +73,12 @@ function slProxy(): Plugin {
           if (typeof userAgent === 'string') headers['user-agent'] = userAgent
           const upstream = await fetch(upstreamUrl.toString(), {
             headers,
+            redirect: 'manual',
             signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
           })
+          if (upstream.type === 'opaqueredirect' || upstream.status === 0 || (upstream.status >= 300 && upstream.status < 400)) {
+            return sendJson(res, 502, { error: 'redirect del upstream no permitido' })
+          }
           if (upstream.status === 401 && injected) clientIds.invalidate()
           res.statusCode = upstream.status
           const contentType = upstream.headers.get('content-type')
@@ -85,6 +92,7 @@ function slProxy(): Plugin {
       })
       server.middlewares.use('/sl-client-id', async (req: IncomingMessage, res: ServerResponse) => {
         if (preflight(req, res)) return
+        if (req.method !== 'GET') return sendJson(res, 405, { error: 'método no permitido' }, { Allow: 'GET, OPTIONS' })
         try {
           const params = new URL(req.url ?? '', 'http://localhost').searchParams
           const refresh = wantsRefresh(params.get('refresh'))

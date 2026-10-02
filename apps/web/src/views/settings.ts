@@ -106,8 +106,8 @@ register('settings', (_route, container) => {
     const resolved = document.documentElement.dataset.theme === 'light' ? 'claro' : 'oscuro'
     themeHint.textContent =
       current === 'system'
-        ? `Siguiendo el tema del sistema · ahora ${resolved}`
-        : `Tema fijado en ${current === 'light' ? 'claro' : 'oscuro'}`
+        ? t('Siguiendo el tema del sistema · ahora {theme}', { theme: t(resolved === 'claro' ? 'Claro' : 'Oscuro').toLowerCase() })
+        : t('Tema fijado en {theme}', { theme: t(current === 'light' ? 'Claro' : 'Oscuro').toLowerCase() })
   }
   refreshThemeHint()
   themeField.addEventListener('click', () => window.setTimeout(refreshThemeHint, 0))
@@ -235,7 +235,7 @@ register('settings', (_route, container) => {
 
   const tourField = h('div', { className: 'settings-field' })
   const tourBtn = h('button', { className: 'btn btn-ghost btn-sm', type: 'button' })
-  tourBtn.innerHTML = `${svgIcon('sun', 16)}<span>Abrir la personalización guiada</span>`
+  tourBtn.innerHTML = `${svgIcon('sun', 16)}<span>${t('Abrir la personalización guiada')}</span>`
   tourBtn.addEventListener('click', () => openWelcome())
   tourField.append(
     h('span', { className: 'field-label' }, t('Personalización guiada')),
@@ -326,13 +326,13 @@ register('settings', (_route, container) => {
   let lastMuted: boolean | null = null
   const syncVolume = (volume: number, muted: boolean): void => {
     if (parseFloat(volumeSlider.value) !== volume) volumeSlider.value = String(volume)
-    const label = muted ? 'Silenciado' : `${Math.round(volume * 100)}%`
+    const label = muted ? t('Silenciado') : `${Math.round(volume * 100)}%`
     if (volumeLabel.textContent !== label) volumeLabel.textContent = label
     if (muted !== lastMuted) {
       lastMuted = muted
       muteBtn.innerHTML = svgIcon(muted ? 'mute' : 'volume', 18)
       muteBtn.classList.toggle('active', muted)
-      muteBtn.title = muted ? 'Quitar silencio' : t('Silenciar')
+      muteBtn.title = muted ? t('Quitar silencio') : t('Silenciar')
     }
   }
 
@@ -357,7 +357,7 @@ register('settings', (_route, container) => {
   const refreshAutoplay = (): void => {
     const on = getSettings().autoplay
     autoplayToggle.classList.toggle('active', on)
-    autoplayToggle.textContent = on ? 'Radio infinita activada' : t('Radio infinita desactivada')
+    autoplayToggle.textContent = on ? t('Radio infinita activada') : t('Radio infinita desactivada')
     autoplayToggle.setAttribute('aria-pressed', on ? 'true' : 'false')
   }
   autoplayToggle.addEventListener('click', () => {
@@ -375,7 +375,7 @@ register('settings', (_route, container) => {
     const chip = h('button', { className: 'chip', type: 'button' }, `${minutes} min`)
     chip.addEventListener('click', () => {
       player.setSleepTimer(minutes)
-      toast(`Se pausará en ${minutes} minutos`, 'ok')
+      toast(t('Se pausará en {minutes} minutos', { minutes }), 'ok')
     })
     sleepRow.appendChild(chip)
   }
@@ -491,7 +491,7 @@ register('settings', (_route, container) => {
     t('El siguiente track se resuelve y se precarga 20 s antes del final. Con 0 s el salto es encadenado (sin silencio); a partir de 1 s se solapan con curva de potencia constante, sin el bajón del centro que deja un fundido lineal.'),
   )
   const paintFade = (seconds: number): void => {
-    fadeValue.textContent = seconds === 0 ? 'Encadenado' : `${seconds} s`
+    fadeValue.textContent = seconds === 0 ? t('Encadenado') : `${seconds} s`
   }
   fadeInput.addEventListener('input', () => paintFade(parseFloat(fadeInput.value)))
   fadeInput.addEventListener('change', () => {
@@ -504,7 +504,7 @@ register('settings', (_route, container) => {
     const settings = getSettings()
     const on = settings.dsp
     dspToggle.classList.toggle('active', on)
-    dspToggle.textContent = on ? 'Motor avanzado activado' : t('Motor avanzado desactivado')
+    dspToggle.textContent = on ? t('Motor avanzado activado') : t('Motor avanzado desactivado')
     dspToggle.setAttribute('aria-pressed', on ? 'true' : 'false')
     dspHint.textContent = on
       ? player.graphActive()
@@ -524,7 +524,7 @@ register('settings', (_route, container) => {
       button.disabled = !on
     })
     levelToggle.classList.toggle('active', settings.leveling)
-    levelToggle.textContent = settings.leveling ? 'Nivelado activado' : t('Nivelado desactivado')
+    levelToggle.textContent = settings.leveling ? t('Nivelado activado') : t('Nivelado desactivado')
     levelToggle.setAttribute('aria-pressed', settings.leveling ? 'true' : 'false')
     ;(levelToggle as HTMLButtonElement).disabled = !on
     if (parseFloat(fadeInput.value) !== settings.crossfade) fadeInput.value = String(settings.crossfade)
@@ -546,8 +546,8 @@ register('settings', (_route, container) => {
     const miniBtn = h('button', { className: 'btn btn-ghost btn-sm', type: 'button' }, t('Abrir el mini reproductor'))
     miniBtn.addEventListener('click', () => {
       void toggleMiniPlayer().then((open) => {
-        miniBtn.textContent = open ? 'Cerrar el mini reproductor' : t('Abrir el mini reproductor')
-        toast(open ? 'Mini reproductor abierto' : t('Mini reproductor cerrado'))
+        miniBtn.textContent = open ? t('Cerrar el mini reproductor') : t('Abrir el mini reproductor')
+        toast(open ? t('Mini reproductor abierto') : t('Mini reproductor cerrado'))
       })
     })
     miniField.append(
@@ -565,7 +565,7 @@ register('settings', (_route, container) => {
     const paintNotify = (): void => {
       const on = getSettings().notifyTrack
       notifyToggle.classList.toggle('active', on)
-      notifyToggle.textContent = on ? 'Avisos activados' : t('Avisos desactivados')
+      notifyToggle.textContent = on ? t('Avisos activados') : t('Avisos desactivados')
       notifyToggle.setAttribute('aria-pressed', on ? 'true' : 'false')
     }
     notifyToggle.addEventListener('click', () => {
@@ -829,7 +829,7 @@ register('settings', (_route, container) => {
     const chip = h(
       'button',
       { className: 'chip', type: 'button', dataset: { budget: String(mb) } },
-      mb === 0 ? 'Desactivado' : mb >= 1000 ? `${mb / 1000} GB` : `${mb} MB`,
+      mb === 0 ? t('Desactivado') : mb >= 1000 ? `${mb / 1000} GB` : `${mb} MB`,
     )
     chip.addEventListener('click', () => {
       updateSettings({ offlineBudget: mb })
@@ -842,7 +842,7 @@ register('settings', (_route, container) => {
   const offlineClear = h('button', { className: 'btn btn-ghost btn-sm', type: 'button' }, t('Vaciar sin conexión'))
   offlineClear.addEventListener('click', () => {
     void clearOffline().then((removed) => {
-      toast(removed > 0 ? `${removed} ${removed === 1 ? 'track quitado' : 'tracks quitados'} del almacenamiento` : t('No había nada guardado'))
+      toast(removed > 0 ? t(removed === 1 ? '{count} track quitado del almacenamiento' : '{count} tracks quitados del almacenamiento', { count: removed }) : t('No había nada guardado'))
       paintOffline()
     })
   })
@@ -862,9 +862,9 @@ register('settings', (_route, container) => {
     offlineUsage.textContent =
       budget === 0
         ? state.entries.length > 0
-          ? `${state.entries.length} guardados (${fmtBytes(state.bytes)}) · el espacio está desactivado, no se guardarán más`
+          ? t('{count} guardados ({size}) · el espacio está desactivado, no se guardarán más', { count: state.entries.length, size: fmtBytes(state.bytes) })
           : t('Guardar sin conexión está desactivado')
-        : `${state.entries.length} ${state.entries.length === 1 ? 'track' : 'tracks'} · ${fmtBytes(state.bytes)} de ${budget >= 1000 ? `${budget / 1000} GB` : `${budget} MB`}`
+        : `${t(state.entries.length === 1 ? '{count} track' : '{count} tracks', { count: state.entries.length })} · ${fmtBytes(state.bytes)} de ${budget >= 1000 ? `${budget / 1000} GB` : `${budget} MB`}`
     budgetChips.forEach((chip) => chip.classList.toggle('active', chip.dataset.budget === String(budget)))
     offlineList.replaceChildren()
     for (const entry of state.entries.slice(0, 40)) {
@@ -883,7 +883,7 @@ register('settings', (_route, container) => {
       offlineList.appendChild(row)
     }
     if (state.entries.length > 40) {
-      offlineList.appendChild(h('p', { className: 'text-faint settings-hint' }, `y ${state.entries.length - 40} más`))
+      offlineList.appendChild(h('p', { className: 'text-faint settings-hint' }, t('y {count} más', { count: state.entries.length - 40 })))
     }
     offlineClear.disabled = state.entries.length === 0
   }
@@ -910,7 +910,7 @@ register('settings', (_route, container) => {
     shortcutList.appendChild(row)
   }
   const shortcutsBtn = h('button', { className: 'btn btn-ghost btn-sm' })
-  shortcutsBtn.innerHTML = `${svgIcon('keyboard', 16)}<span>Ver en pantalla completa</span>`
+  shortcutsBtn.innerHTML = `${svgIcon('keyboard', 16)}<span>${t('Ver en pantalla completa')}</span>`
   shortcutsBtn.addEventListener('click', () => openShortcuts())
   page.appendChild(settingsCard('keyboard', t('Atajos de teclado'), [shortcutList, shortcutsBtn]))
 
@@ -1023,7 +1023,7 @@ register('settings', (_route, container) => {
       return
     }
     const minutes = Math.max(1, Math.round((state.sleepAt - Date.now()) / 60_000))
-    sleepStatus.textContent = `La reproducción se pausará en unos ${minutes} min.`
+    sleepStatus.textContent = t('La reproducción se pausará en unos {minutes} min.', { minutes })
   }
 
   let attached = false

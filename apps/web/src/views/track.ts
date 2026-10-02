@@ -97,7 +97,7 @@ function descriptionBlock(text: string): HTMLElement {
   const toggle = h('button', { className: 'btn btn-ghost btn-sm track-desc-toggle' }, t('Ver más'))
   toggle.addEventListener('click', () => {
     const clamped = body.classList.toggle('desc-clamped')
-    toggle.textContent = clamped ? 'Ver más' : t('Ver menos')
+    toggle.textContent = clamped ? t('Ver más') : t('Ver menos')
   })
   wrap.appendChild(toggle)
   return wrap
@@ -251,10 +251,10 @@ function renderTrack(track: Track, container: HTMLElement): void {
   actions.appendChild(playBtn)
 
   const queueBtn = h('button', { className: 'btn btn-ghost' })
-  queueBtn.innerHTML = `${svgIcon('plus', 18)}<span>Añadir a la cola</span>`
+  queueBtn.innerHTML = `${svgIcon('plus', 18)}<span>${t('Añadir a la cola')}</span>`
   queueBtn.addEventListener('click', () => {
     const added = player.addToQueue(track)
-    toast(added ? 'Añadido a la cola' : t('Ya estaba en la cola'), added ? 'ok' : 'info')
+    toast(added ? t('Añadido a la cola') : t('Ya estaba en la cola'), added ? 'ok' : 'info')
   })
   actions.appendChild(queueBtn)
 
@@ -276,7 +276,7 @@ function renderTrack(track: Track, container: HTMLElement): void {
       const reposted = isReposted(track.id)
       repostBtn.disabled = isBusy(track.id)
       repostBtn.classList.toggle('active', reposted)
-      repostBtn.title = reposted ? 'Quitar el repost' : t('Repostear en tu perfil')
+      repostBtn.title = reposted ? t('Quitar el repost') : t('Repostear en tu perfil')
       repostBtn.setAttribute('aria-label', repostBtn.title)
       repostBtn.setAttribute('aria-pressed', String(reposted))
       repostBtn.innerHTML = svgIcon('repost', 19)
@@ -318,7 +318,7 @@ function renderTrack(track: Track, container: HTMLElement): void {
       : saved
         ? t('Quitar de sin conexión')
         : (blocked ?? t('Guardar en este dispositivo para escuchar sin conexión'))
-    offlineBtn.setAttribute('aria-label', saved ? 'Quitar de sin conexión' : t('Guardar sin conexión'))
+    offlineBtn.setAttribute('aria-label', saved ? t('Quitar de sin conexión') : t('Guardar sin conexión'))
     offlineBtn.setAttribute('aria-pressed', String(saved))
     offlineBtn.innerHTML = svgIcon(saved ? 'check' : 'download', 19)
   }
@@ -340,7 +340,7 @@ function renderTrack(track: Track, container: HTMLElement): void {
     const exhausted = track.has_downloads_left === false
     const dlBtn = h('button', {
       className: 'icon-btn',
-      title: exhausted ? 'El artista agotó el cupo de descargas' : t('Descargar el archivo original'),
+      title: exhausted ? t('El artista agotó el cupo de descargas') : t('Descargar el archivo original'),
       'aria-label': t('Descargar'),
     })
     dlBtn.innerHTML = svgIcon('download', 19)
@@ -390,14 +390,14 @@ function renderTrack(track: Track, container: HTMLElement): void {
         label: t('Añadir a la cola'),
         icon: 'plus',
         onSelect: () => {
-          toast(player.addToQueue(track) ? 'Añadido a la cola' : t('Ya estaba en la cola'))
+          toast(player.addToQueue(track) ? t('Añadido a la cola') : t('Ya estaba en la cola'))
         },
       },
       { label: t('Empezar radio'), icon: 'radio', onSelect: () => void player.startRadio(track) },
     ]
     if (user) {
       entries.push('separator', {
-        label: `Radio de ${user.username}`,
+        label: t('Radio de {artist}', { artist: user.username }),
         icon: 'radio',
         onSelect: () => void player.startRadio(track, 'artist'),
       })
@@ -412,7 +412,7 @@ function renderTrack(track: Track, container: HTMLElement): void {
   if (trackTags.length > 0) {
     const tagRow = h('div', { className: 'chip-row track-tag-row' })
     for (const tag of trackTags) {
-      const chip = h('a', { className: 'chip track-tag', href: link('/search', { q: tag }), title: `Buscar «${tag}»` })
+      const chip = h('a', { className: 'chip track-tag', href: link('/search', { q: tag }), title: t('Buscar «{query}»', { query: tag }) })
       chip.appendChild(iconEl('tag', 12))
       chip.appendChild(document.createTextNode(tag))
       tagRow.appendChild(chip)
@@ -457,7 +457,7 @@ function renderTrack(track: Track, container: HTMLElement): void {
     note.appendChild(
       document.createTextNode(
         snip.timelineMs > snip.previewMs
-          ? `Preview de ${fmtTime(snip.previewMs)} de ${fmtTime(snip.timelineMs)} · exclusivo Go+`
+          ? t('Preview de {preview} de {duration} · exclusivo Go+', { preview: fmtTime(snip.previewMs), duration: fmtTime(snip.timelineMs) })
           : t('Preview de 30s (exclusivo Go+)'),
       ),
     )
@@ -563,15 +563,15 @@ function renderTrack(track: Track, container: HTMLElement): void {
     const isCurrent = state.current?.id === track.id
     const playing = isCurrent && state.playing
     playIcon.innerHTML = svgIcon(playing ? 'pause' : 'play', 18)
-    playLabel.textContent = playing ? 'Pausar' : t('Reproducir')
+    playLabel.textContent = playing ? t('Pausar') : t('Reproducir')
     artPlay.innerHTML = svgIcon(playing ? 'pause' : 'play', 34)
-    art.title = playing ? 'Pausar' : `Reproducir «${track.title}»`
+    art.title = playing ? t('Pausar') : t('Reproducir «{title}»', { title: track.title })
     timeNow.textContent = fmtTime(isCurrent ? player.progressMs() : 0)
   }
   const renderLike = (): void => {
     const liked = player.isLiked(track)
     likeBtn.dataset.liked = String(liked)
-    likeBtn.title = liked ? 'Quitar de favoritos' : t('Guardar en favoritos')
+    likeBtn.title = liked ? t('Quitar de favoritos') : t('Guardar en favoritos')
     likeBtn.innerHTML = svgIcon(liked ? 'heartFill' : 'heart', 20)
   }
   renderPlay()
@@ -580,7 +580,7 @@ function renderTrack(track: Track, container: HTMLElement): void {
   playBtn.addEventListener('click', () => togglePlay())
   likeBtn.addEventListener('click', () => {
     player.toggleLike(track)
-    toast(player.isLiked(track) ? 'Guardado en favoritos' : t('Quitado de favoritos'), 'ok')
+    toast(player.isLiked(track) ? t('Guardado en favoritos') : t('Quitado de favoritos'), 'ok')
   })
 
   async function share(): Promise<void> {
@@ -630,8 +630,8 @@ function renderTrack(track: Track, container: HTMLElement): void {
       const jump = h('button', {
         className: 'comment-at',
         type: 'button',
-        title: `Reproducir desde ${fmtTime(at)}`,
-        'aria-label': `Reproducir desde ${fmtTime(at)}`,
+      title: t('Reproducir desde {time}', { time: fmtTime(at) }),
+      'aria-label': t('Reproducir desde {time}', { time: fmtTime(at) }),
       })
       jump.appendChild(iconEl('play', 11))
       jump.appendChild(document.createTextNode(fmtTime(at)))
@@ -658,11 +658,11 @@ function renderTrack(track: Track, container: HTMLElement): void {
     const card = h('a', { className: 'appears-card', href: link(`/playlist/${playlist.id}`), title: playlist.title })
     const art = artEl(playlist.artwork_url, playlist.title, { size: 't300x300' })
     art.classList.add('appears-art')
-    const kind = playlist.is_album === true || playlist.set_type === 'album' ? 'Álbum' : t('Playlist')
+    const kind = playlist.is_album === true || playlist.set_type === 'album' ? t('Álbum') : t('Playlist')
     card.append(
       art,
       h('span', { className: 'appears-title truncate' }, playlist.title),
-      h('span', { className: 'appears-sub truncate' }, `${kind} · ${playlist.track_count ?? 0} tracks`),
+      h('span', { className: 'appears-sub truncate' }, `${kind} · ${t('{count} tracks', { count: playlist.track_count ?? 0 })}`),
     )
     return card
   }

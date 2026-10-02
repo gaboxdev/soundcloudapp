@@ -71,7 +71,7 @@ export async function bootstrapMini(): Promise<void> {
     current = state
     const hasTrack = state.title !== ''
     title.textContent = hasTrack ? state.title : t('Nada suena')
-    artist.textContent = hasTrack ? state.artist || 'Artista desconocido' : t('Abre SoundClear y elige algo')
+    artist.textContent = hasTrack ? state.artist || t('Artista desconocido') : t('Abre SoundClear y elige algo')
     if (state.artwork !== lastArtwork) {
       lastArtwork = state.artwork ?? ''
       art.replaceChildren(...artEl(state.artwork, state.title || t('SoundClear'), { size: 't120x120' }).children)

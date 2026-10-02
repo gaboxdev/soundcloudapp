@@ -18,6 +18,8 @@
   --veil-3: color-mix(in srgb, var(--glass-color) calc((var(--glass-tint) + 0.18) * 100%), transparent);
   --veil-chrome: color-mix(in srgb, var(--glass-color) calc(var(--glass-chrome) * 100%), transparent);
   --veil-panel: color-mix(in srgb, var(--glass-color) calc(var(--glass-panel) * 100%), transparent);
+  --veil-floating: color-mix(in srgb, var(--glass-color) max(76%, calc(var(--glass-chrome) * 100%)), transparent);
+  --veil-overlay: color-mix(in srgb, var(--glass-color) max(84%, calc(var(--glass-panel) * 100%)), transparent);
 
   --glass-sheet: linear-gradient(135deg, rgb(255 255 255 / 0.07) 0%, rgb(255 255 255 / 0.015) 46%, rgb(255 255 255 / 0) 100%);
 
@@ -220,6 +222,11 @@
 
 /* ===== Cristal nativo del sistema ===== */
 
+:root[data-glass-fallback='opaque'] {
+  --veil-floating: color-mix(in srgb, var(--glass-color) 98%, transparent);
+  --veil-overlay: color-mix(in srgb, var(--glass-color) 98%, transparent);
+}
+
 :root[data-backdrop='system'] {
   --system-veil: 0.34;
 }
@@ -230,6 +237,10 @@
 
 :root[data-backdrop='system'][data-glass='solido'] {
   --system-veil: 0.62;
+}
+
+:root[data-backdrop='system'][data-theme='light'] {
+  --system-veil: max(0.82, var(--ambient-veil));
 }
 
 :root[data-backdrop='system'],

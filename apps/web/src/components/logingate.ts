@@ -4,11 +4,13 @@ import { h, svgIcon } from '../ui/el'
 import { appLogo, appLogoLive } from '../ui/logo'
 import { toast, toastErr } from '../ui/toast'
 import { t } from '../core/i18n.ts'
+import { onDetach } from '../core/lifecycle'
+import { trapFocus } from '../ui/modal'
 
 const SLOW_CHECK_MS = 3500
 
 export function renderLoginGate(): HTMLElement {
-  const gate = h('div', { className: 'login-gate', hidden: true })
+  const gate = h('div', { className: 'login-gate', hidden: true, role: 'dialog', 'aria-modal': 'true', 'aria-label': t('Inicia sesión') })
   if (isDesktop()) gate.setAttribute('data-tauri-drag-region', '')
 
   const check = h('div', { className: 'login-check' })
@@ -130,7 +132,8 @@ export function renderLoginGate(): HTMLElement {
 
     if (isDesktop()) {
       const btn = h('button', { className: 'btn btn-primary login-btn' })
-      btn.innerHTML = `${svgIcon('headphone', 18)} Iniciar sesión con SoundCloud`
+      btn.innerHTML = svgIcon('headphone', 18)
+      btn.appendChild(document.createTextNode(t('Iniciar sesión con SoundCloud')))
       btn.addEventListener('click', () => {
         void desktopInvoke('login_window').catch(() => toastErr(t('No se pudo abrir la ventana de sesión')))
       })
@@ -181,7 +184,8 @@ export function renderLoginGate(): HTMLElement {
         'a',
         { className: 'btn btn-primary', href: 'https://github.com/gaboxdev/soundcloudapp', target: '_blank', rel: 'noopener' },
       )
-      download.innerHTML = `${svgIcon('github', 18)} Obtener la app de escritorio`
+      download.innerHTML = svgIcon('github', 18)
+      download.appendChild(document.createTextNode(t('Obtener la app de escritorio')))
       actions.appendChild(download)
       actions.appendChild(guestBtn)
       actions.appendChild(
@@ -194,11 +198,14 @@ export function renderLoginGate(): HTMLElement {
     }
   }
 
-  accountStore.subscribe((state) => {
+  const unsubscribe = accountStore.subscribe((state) => {
     const ready = state.status === 'ready'
     const open = !ready && !guestAllowed()
     if (gate.hidden === open) gate.hidden = !open
     document.documentElement.classList.toggle('gate-open', open)
+    for (const child of document.getElementById('app')?.children ?? []) {
+      if (child instanceof HTMLElement && child !== gate) child.inert = open
+    }
     if (ready || !open) {
       stopPoll()
       stopSlowTimer()
@@ -206,6 +213,16 @@ export function renderLoginGate(): HTMLElement {
       startPoll()
     }
     render(state)
+    if (open) window.requestAnimationFrame(() => {
+      if (gate.isConnected && !gate.hidden && !gate.contains(document.activeElement)) gate.querySelector<HTMLButtonElement>('button:not([hidden])')?.focus()
+    })
+  })
+  const releaseFocus = trapFocus(gate, () => {})
+  onDetach(gate, () => {
+    unsubscribe()
+    releaseFocus()
+    stopPoll()
+    stopSlowTimer()
   })
 
   gate.append(check, card)

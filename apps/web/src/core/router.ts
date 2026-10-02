@@ -1,3 +1,4 @@
+import { t } from './i18n.ts'
 export interface Route {
   view: string
   params: Record<string, string>
@@ -134,8 +135,18 @@ function syncScroll(): void {
 function notFoundEl(): HTMLElement {
   const box = document.createElement('div')
   box.className = 'page-error'
-  box.innerHTML =
-    '<h2>Página no encontrada</h2><p class="text-dim">Esa ruta no existe en SoundClear.</p><div><a class="btn btn-primary" href="#/">Volver al inicio</a></div>'
+  const title = document.createElement('h2')
+  title.textContent = t('Página no encontrada')
+  const text = document.createElement('p')
+  text.className = 'text-dim'
+  text.textContent = t('Esa ruta no existe en SoundClear.')
+  const actions = document.createElement('div')
+  const home = document.createElement('a')
+  home.className = 'btn btn-primary'
+  home.href = '#/'
+  home.textContent = t('Volver al inicio')
+  actions.appendChild(home)
+  box.append(title, text, actions)
   return box
 }
 
@@ -144,14 +155,14 @@ function showViewError(host: HTMLElement): void {
   const box = document.createElement('div')
   box.className = 'page-error'
   const title = document.createElement('h2')
-  title.textContent = 'No se pudo cargar esta página'
+  title.textContent = t('No se pudo cargar esta página')
   const text = document.createElement('p')
   text.className = 'text-dim'
-  text.textContent = 'Ha ocurrido un error inesperado. Comprueba tu conexión e inténtalo de nuevo.'
+  text.textContent = t('Ha ocurrido un error inesperado. Comprueba tu conexión e inténtalo de nuevo.')
   const actions = document.createElement('div')
   const retry = document.createElement('button')
   retry.className = 'btn btn-primary'
-  retry.textContent = 'Reintentar'
+  retry.textContent = t('Reintentar')
   retry.addEventListener('click', () => render())
   actions.appendChild(retry)
   box.append(title, text, actions)

@@ -174,7 +174,7 @@ img {
   align-items: center;
   gap: 16px;
   padding: 0 20px;
-  background-color: var(--veil-chrome);
+  background-color: var(--veil-floating);
   background-image: var(--glass-sheet);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
@@ -243,13 +243,25 @@ img {
   z-index: 60;
   height: var(--player-h);
   border-radius: var(--radius-lg);
-  background-color: var(--veil-chrome);
-  background-image: var(--glass-sheet);
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
   border: 1px solid var(--hairline-2);
   box-shadow: var(--glass-shadow-lg), var(--edge-light);
   overflow: hidden;
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+}
+
+.app-player::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-color: var(--veil-floating);
+  background-image: var(--glass-sheet);
+  pointer-events: none;
+}
+
+.app-player > * {
+  position: relative;
 }
 
 /* ===== Tipografía ===== */
@@ -817,7 +829,7 @@ h4 {
   border-radius: var(--radius-sm);
   overflow: hidden;
   touch-action: none;
-  background-color: var(--veil-panel);
+  background-color: var(--veil-overlay);
   box-shadow: inset 0 0 0 1px var(--hairline);
 }
 
@@ -989,7 +1001,7 @@ h4 {
   flex-direction: column;
   gap: 2px;
   padding: 6px;
-  background-color: var(--veil-panel);
+  background-color: var(--veil-overlay);
   background-image: var(--glass-sheet);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
@@ -1048,7 +1060,7 @@ h4 {
 }
 
 .toast {
-  background-color: var(--veil-panel);
+  background-color: var(--veil-overlay);
   background-image: var(--glass-sheet);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
@@ -1341,7 +1353,7 @@ html.gate-open body {
   align-items: center;
   gap: 14px;
   border-radius: var(--radius-lg);
-  background-color: var(--veil-panel);
+  background-color: var(--veil-overlay);
   background-image: var(--glass-sheet);
   border: 1px solid var(--hairline-2);
   box-shadow: var(--glass-shadow-lg), var(--edge-light);
@@ -1676,7 +1688,7 @@ html.gate-open body {
   max-width: 300px;
   padding: 6px;
   border-radius: var(--radius);
-  background-color: var(--veil-panel);
+  background-color: var(--veil-overlay);
   background-image: var(--glass-sheet);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
@@ -1792,7 +1804,7 @@ html.modal-open body {
   width: 100%;
   max-width: 560px;
   border-radius: var(--radius-lg);
-  background-color: var(--veil-panel);
+  background-color: var(--veil-overlay);
   background-image: var(--glass-sheet);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
