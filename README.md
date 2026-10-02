@@ -170,6 +170,14 @@ Antes de abrir el primer issue, el [código de conducta](./CODE_OF_CONDUCT.md) c
 
 **SoundClear es un proyecto independiente de código abierto, sin afiliación, patrocinio ni respaldo de SoundCloud.** No está desarrollado, avalado ni revisado por SoundCloud.
 
+### Alcance técnico
+
+SoundClear habla con endpoints de SoundCloud que **no forman parte de una API pública documentada**: el identificador de cliente se extrae en tiempo de ejecución del HTML del propio sitio y las llamadas viajan por un proxy propio. La consecuencia práctica es que **la app puede dejar de funcionar sin aviso** si SoundCloud cambia sus endpoints, sus cabeceras o sus CDN.
+
+No es un defecto del proyecto: es el precio de que no exista app oficial. No hay una API pública a la que pidiendo permiso se le pueda migrar.
+
+SoundCloud mantiene sus condiciones de uso sobre su API, y este proyecto las respeta en su letra donde puede: **no reproduce medios cifrados con DRM**, no redistribuye ni rehospeda audio, y solo descarga archivos cuando el artista lo permite. Si SoundCloud pide que el proyecto deje de operar contra su servicio, se para.
+
 «SoundCloud» es una marca registrada de SoundCloud Global Limited & Co. KG. Sus marcas, logotipos y contenido pertenecen a sus respectivos dueños y aquí se mencionan únicamente de forma descriptiva, para indicar con qué servicio funciona este cliente. SoundClear no usa el nombre ni el logotipo de SoundCloud como identidad propia: tiene su propio nombre y su propia marca.
 
 SoundClear consulta endpoints de SoundCloud, incluidos los de tu cuenta cuando inicias sesión. El audio se reproduce desde sus servidores; la opción sin conexión guarda audio reproducible en el dispositivo y la descarga de archivos usa el permiso `downloadable` del track. La app no reproduce medios cifrados con DRM. Licencia [MIT](./LICENSE).
