@@ -378,6 +378,7 @@ export const EN: Record<string, string> = {
   'Reproducir las tendencias': 'Play the trending list',
   'Reproducir lo nuevo': 'Play what is new',
   'Reproducir o pausar': 'Play or pause',
+  'Se pausó porque ya suena en otra pestaña': 'Paused because another tab is playing',
   ', recién renovado': ', just renewed',
   'Reproducir todo': 'Play all',
   'Reproducir tracks': 'Play tracks',

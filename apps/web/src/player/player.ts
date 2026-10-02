@@ -11,6 +11,7 @@ import { aheadOf, buildOrder, dedupeById, dropPlayed, moveInList, nextInOrder, r
 import { toast, toastErr } from '../ui/toast'
 import { audioGraphSupported, createAudioGraph, equalPowerCurves, normalizeGains, type AudioGraph } from './audiograph'
 import { confirmedLikeState, mergeLikeTracks, rememberLikeBaseline, type LikeOverride } from './likeops'
+import { claimPlayback, initCrossTab, releasePlayback } from '../core/crosstab'
 import { t } from '../core/i18n.ts'
 
 export interface PlayerState {
@@ -196,6 +197,7 @@ class Player {
 
     this.bindMediaSession()
     this.bindWindowEvents()
+    this.bindCrossTab()
 
     accountStore.subscribe((state) => {
       const key = state.status === 'ready' && state.user ? `ready:${state.user.id}` : state.status
@@ -390,6 +392,21 @@ class Player {
     window.addEventListener('pagehide', () => this.savePlayback())
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') this.savePlayback()
+    })
+  }
+
+  private bindCrossTab(): void {
+    const ready = initCrossTab(() => {
+      this.pause()
+      toast(t('Se pausó porque ya suena en otra pestaña'))
+    })
+    if (!ready) return
+    let sonando = false
+    this.store.subscribe((state) => {
+      if (state.playing === sonando) return
+      sonando = state.playing
+      if (sonando) claimPlayback()
+      else releasePlayback()
     })
   }
 
