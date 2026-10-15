@@ -10,6 +10,6 @@
     "icons": "node scripts/gen-icons.mjs && tauri icon src-tauri/icons/icon.png"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2"
+    "@tauri-apps/cli": "^2.12.0"
   }
 }
