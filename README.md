@@ -1,5 +1,9 @@
 # SoundClear
 
+<p align="center">
+  <img src="apps/web/public/icon.svg" width="88" alt="Logotipo de SoundClear">
+</p>
+
 > Cliente libre para SoundCloud. Rápido, open source y sin frameworks.
 >
 > *Proyecto independiente, sin afiliación con SoundCloud.*
@@ -9,6 +13,70 @@ SoundClear es un **cliente nativo de SoundCloud** — no es un wrapper de la web
 **~80 KB de JavaScript + 17 KB de CSS** (gzip) para la app completa, radio infinita y paleta de comandos incluidas. Sin React, sin Vue, sin Svelte: TypeScript vanilla + CSS. El resto es disciplina.
 
 Un regalo para la comunidad de SoundCloud. MIT, para quien lo quiera, como se hizo siempre.
+
+**[Descargar para macOS](#descargar)** · [Windows y Linux](#descargar) · [Compilar desde el código](#compilar-desde-el-codigo) · [Probar en el navegador](#uso-en-web)
+
+![Ahora suena: carátula, onda y la cola](docs/screenshots/now-playing.png)
+
+![Charts, tendencias globales](docs/screenshots/charts.png)
+
+<a id="descargar"></a>
+
+## Descargar
+
+### macOS
+
+La [última release](https://github.com/gaboxdev/soundcloudapp/releases/latest) es la **[v0.1.0](https://github.com/gaboxdev/soundcloudapp/releases/tag/v0.1.0)**. Trae un binario universal (Apple Silicon e Intel), unos 10 MB:
+
+- [SoundClear_0.1.0_universal.dmg](https://github.com/gaboxdev/soundcloudapp/releases/download/v0.1.0/SoundClear_0.1.0_universal.dmg) — ábrelo y arrastra SoundClear a Aplicaciones. Es el que hay que bajar.
+- [SoundClear_universal.app.tar.gz](https://github.com/gaboxdev/soundcloudapp/releases/download/v0.1.0/SoundClear_universal.app.tar.gz) — el mismo `.app`, comprimido, por si el DMG no te sirve.
+
+**No está firmado ni notarizado** (la firma de Apple cuesta 99 $/año y este proyecto no cobra nada). macOS lo bloquea la primera vez:
+
+1. Copia SoundClear a Aplicaciones. No lo abras desde el DMG.
+2. En Aplicaciones, clic derecho sobre SoundClear › **Abrir** › **Abrir**.
+3. Si ese diálogo no sale: **Ajustes del Sistema › Privacidad y seguridad › Abrir igualmente**.
+
+O quita la cuarentena y ábrelo como cualquier otra app:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/SoundClear.app
+```
+
+Esos dos enlaces son la 0.1.0. Cuando haya otra versión, [la release más reciente](https://github.com/gaboxdev/soundcloudapp/releases/latest) es la que hay que mirar.
+
+### Windows
+
+**La v0.1.0 no incluye instalador de Windows.** Aquella etiqueta solo compiló macOS. En el [workflow actual](./.github/workflows/release.yml), cada etiqueta nueva compila un `.exe` (NSIS) y un `.msi` para Windows x64 y los sube al borrador de la release. Hasta que esa etiqueta exista, [compílalo](#compilar-desde-el-codigo). Compilar en Windows ya está probado — sesión, bandeja, mini reproductor, acrílico nativo y descargas incluidos. Lo que falta es el instalador publicado.
+
+Cuando estén, tampoco irán firmados. SmartScreen avisa la primera vez: **Más información** › **Ejecutar de todas formas**. El instalador NSIS descarga WebView2 si Windows no lo trae (Windows 11 ya lo tiene).
+
+En Windows los atajos globales usan **Ctrl+Alt** en vez de ⌘⌥, y la ventana lleva la barra de título nativa además de la cabecera de la app (en macOS van fundidas).
+
+### Linux
+
+**La v0.1.0 tampoco trae Linux.** El mismo workflow sube un `.deb` y un `.AppImage` (x64) en la próxima etiqueta. Sigue sin estar probado en un escritorio real: trátalo como experimental. En Wayland el cristal de la ventana depende del compositor; con GNOME en X11 o con un compositor antiguo la ventana puede verse opaca.
+
+<a id="compilar-desde-el-codigo"></a>
+
+### Compilar desde el código
+
+Node ≥ 22.18 (recomendado Node 24) y Rust estable:
+
+```bash
+git clone https://github.com/gaboxdev/soundcloudapp.git
+cd soundcloudapp
+npm install
+npm run build -w apps/desktop
+```
+
+En macOS el `.app` queda en `apps/desktop/src-tauri/target/release/bundle/macos/`; arrástralo a Aplicaciones. Un binario compilado en tu máquina no pasa por la cuarentena de Gatekeeper.
+
+En Windows hacen falta los **Build Tools de Visual Studio** (C++ y el SDK de Windows) y el toolchain de Rust `-msvc`. Salen `nsis/SoundClear_<versión>_x64-setup.exe` y `msi/SoundClear_<versión>_x64_en-US.msi` dentro de `apps/desktop/src-tauri/target/release/bundle/`.
+
+En Linux salen el `.deb` y el `.AppImage` en esa misma carpeta `bundle/`.
+
+Si solo quieres verla funcionando sin compilar nada, `npm run dev` te da la versión web en modo invitado.
 
 ---
 
@@ -44,41 +112,6 @@ Un regalo para la comunidad de SoundCloud. MIT, para quien lo quiera, como se hi
 | 🖥️ **Escritorio** | Tauri 2: binario nativo de pocos MB, sin Electron |
 | 🎨 **Skeletons + blur-up** | La UI nunca se siente vacía: carga instantánea, imágenes lazy |
 
-## 📦 Instalar
-
-**Todavía no hay binarios publicados.** El primer release de macOS y Windows saldrá de [`.github/workflows/release.yml`](./.github/workflows/release.yml) al etiquetar una versión; hasta entonces, compilarlo son tres comandos (Node ≥ 22.18, recomendado Node 24):
-
-```bash
-git clone https://github.com/gaboxdev/soundcloudapp.git
-cd soundcloudapp
-npm install
-npm run build -w apps/desktop     # requiere Rust estable
-```
-
-En macOS el `.app` queda en `apps/desktop/src-tauri/target/release/bundle/macos/`; arrástralo a
-Aplicaciones. En Windows salen dos instaladores en
-`apps/desktop/src-tauri/target/release/bundle/`: `nsis/SoundClear_0.1.0_x64-setup.exe` (3,7 MB) y
-`msi/SoundClear_0.1.0_x64_en-US.msi` (5,2 MB).
-
-Cuando haya binarios, ojo con esto: **no van firmados ni notarizados** (la firma de Apple cuesta 99 $/año y este proyecto no cobra nada). macOS los bloqueará la primera vez — ábrelos con clic derecho › **Abrir**, o quita la cuarentena:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/SoundClear.app
-```
-
-**Windows ya está probado**: compila y funciona sin cambios de código — sesión, bandeja, mini
-reproductor, acrílico nativo y descargas incluidos. Necesita Rust estable, los **Build Tools de
-Visual Studio** (C++ y el SDK de Windows) y el **WebView2 Runtime**, que Windows 11 ya trae.
-Como el binario no va firmado, SmartScreen avisa la primera vez: **Más información** ›
-**Ejecutar de todas formas**.
-
-Dos diferencias reales frente a macOS: los atajos globales usan **Ctrl+Alt** en vez de ⌘⌥, y la
-ventana lleva la barra de título nativa de Windows además de la cabecera de la app (en macOS van
-fundidas). Linux se compila en CI desde ahora, pero sigue sin estar validado en un escritorio
-real: tratalo como experimental.
-
-Si solo quieres verla funcionando sin compilar nada, `npm run dev` te da la versión web en modo invitado.
-
 ## 🚀 Empezar
 
 ```bash
@@ -92,7 +125,7 @@ npm run dev:desktop  # app de escritorio (requiere Rust)
 La API de SoundCloud bloquea CORS desde cualquier origen que no sea `soundcloud.com`. El `client_id` se extrae del propio HTML de SoundCloud (bloque hydratable) y se cachea. Por eso la app web necesita un proxy fino:
 
 - **Dev**: ya incluido en Vite (`apps/web/vite.config.ts`) — `/sl-proxy` y `/sl-client-id`.
-- **Producción**: despliega el Cloudflare Worker en `proxy/worker` (~100 líneas) y pon su URL en **Ajustes → Proxy**. Funciona gratis en el plan free de Cloudflare.
+- **Producción**: despliega el Cloudflare Worker en `proxy/worker` (~100 líneas) y pon su URL en **Ajustes → Proxy (avanzado)**. Funciona gratis en el plan free de Cloudflare.
 
 El audio y los waveforms se sirven directo desde los CDNs de SoundCloud (`Access-Control-Allow-Origin: *`), sin pasar por el proxy.
 
@@ -148,8 +181,8 @@ Detalles técnicos en [AGENTS.md](./AGENTS.md).
 - [x] Estaciones de radio de tracks y artistas
 - [ ] Más tamaños de arte (CDN) y opción de calidad
 - [ ] Versión móvil nativa
-- [x] Flujo de compilados para macOS y Windows (publicación pendiente)
-- [~] Compilados para Linux en CI, sin validar todavía en un escritorio real
+- [x] Flujo de compilados para macOS y Windows (macOS publicado en v0.1.0; Windows en la próxima etiqueta)
+- [~] Compilados de Linux en el workflow de release, sin validar todavía en un escritorio real
 - [x] Soporte de idiomas (español e inglés, cambio en caliente)
 
 ¿Ideas? Abre un issue o un PR — este proyecto es tuyo también.

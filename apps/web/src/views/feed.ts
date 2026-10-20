@@ -116,7 +116,7 @@ register('feed', (_route, container) => {
       empty.appendChild(
         h(
           'a',
-          { className: 'btn btn-ghost', href: 'https://github.com/gaboxdev/soundcloudapp', target: '_blank', rel: 'noopener' },
+          { className: 'btn btn-ghost', href: 'https://github.com/gaboxdev/soundcloudapp#descargar', target: '_blank', rel: 'noopener' },
           t('Obtener la app de escritorio'),
         ),
       )

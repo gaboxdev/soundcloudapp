@@ -9,9 +9,9 @@ on:
         description: 'Etiqueta a publicar (v0.1.0)'
         required: true
 
-# Publicar dos veces la misma etiqueta no debe lanzar dos veces los tres builds.
+# Una etiqueta, una corrida. La segunda espera: cancelarla a medias dejaría un borrador a medias.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -23,8 +23,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
@@ -38,13 +38,78 @@ jobs:
       - run: npm run i18n -- --estricto
       - run: npm audit --audit-level=high
 
-  macos:
+  # Un solo borrador, creado aquí, antes de compilar. Si macOS, Windows y Linux
+  # llaman a tauri-action a la vez con releaseDraft, las que pierden la carrera
+  # de crear la release fallan y sus binarios no se suben.
+  draft:
     needs: validate
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+    steps:
+      - name: Crear o reutilizar el borrador
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$'; then
+            echo "Etiqueta no válida: $TAG" >&2
+            exit 1
+          fi
+          notes="${RUNNER_TEMP}/release-notes.md"
+          cat > "$notes" <<'EOF'
+          macOS universal (Apple Silicon e Intel), Windows x64 (`.exe` de NSIS y `.msi`) y Linux x64 (`.deb` y `.AppImage`).
+
+          **El binario no está firmado ni notarizado.**
+
+          macOS lo bloquea la primera vez. Copia SoundClear a Aplicaciones y ábrelo con clic derecho › **Abrir**. Si no sale esa opción: Ajustes del Sistema › Privacidad y seguridad › **Abrir igualmente**. O quita la cuarentena:
+
+          `xattr -dr com.apple.quarantine /Applications/SoundClear.app`
+
+          **Windows: el binario no está firmado.** SmartScreen puede avisar: **Más información** › **Ejecutar de todas formas**. El instalador NSIS descarga WebView2 si falta.
+
+          **Linux** no está validado en un escritorio real. El `.deb` se instala con `sudo apt install ./soundclear_*.deb`. El `.AppImage` necesita permiso de ejecución. En Wayland el cristal de la ventana depende del compositor.
+
+          Proyecto independiente, sin afiliación con SoundCloud.
+          EOF
+          line=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq ".[] | select(.tag_name==\"${TAG}\") | \"\(.id) \(.draft)\"")
+          if [ -z "$line" ]; then
+            payload="${RUNNER_TEMP}/release.json"
+            jq -n \
+              --arg tag "$TAG" \
+              --arg name "SoundClear ${TAG}" \
+              --arg target "$GITHUB_SHA" \
+              --rawfile body "$notes" \
+              '{tag_name:$tag, name:$name, target_commitish:$target, draft:true, body:$body}' \
+              > "$payload"
+            id=$(gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" --input "$payload" --jq .id)
+            state=true
+          else
+            id=${line%% *}
+            state=${line##* }
+          fi
+          if [ -z "$id" ] || [ "$id" = "null" ]; then
+            echo "No se obtuvo el id de la release ${TAG}." >&2
+            exit 1
+          fi
+          # Una release ya publicada (v0.1.0 es solo macOS) no se reescribe desde aquí.
+          if [ "$state" != "true" ]; then
+            echo "La release ${TAG} ya está publicada. Este workflow no la modifica: etiqueta una versión nueva." >&2
+            exit 1
+          fi
+          echo "release_id=${id}" >> "$GITHUB_OUTPUT"
+          echo "Borrador ${TAG}: ${id}"
+
+  macos:
+    needs: draft
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
@@ -53,7 +118,7 @@ jobs:
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: apps/desktop/src-tauri
 
@@ -62,35 +127,24 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
-          tagName: ${{ inputs.tag || github.ref_name }}
-          releaseName: SoundClear ${{ inputs.tag || github.ref_name }}
-          releaseDraft: true
+          releaseId: ${{ needs.draft.outputs.release_id }}
+          # No hay plugin de updater: sin esto los tres jobs se pisan subiendo latest.json.
+          includeUpdaterJson: false
+          retryAttempts: 2
           args: --target universal-apple-darwin
-          releaseBody: |
-            macOS universal (Apple Silicon e Intel) y Windows x64 (`.exe` y `.msi`).
-
-            **El binario no está firmado ni notarizado.** macOS lo va a bloquear la primera vez:
-            abre el `.app` con clic derecho › **Abrir**, o quita la cuarentena con
-            `xattr -dr com.apple.quarantine /Applications/SoundClear.app`.
-
-            **Windows: el binario no está firmado.** SmartScreen puede avisar:
-            **Más información** › **Ejecutar de todas formas**.
-            El instalador descarga WebView2 si falta.
-
-            Proyecto independiente, sin afiliación con SoundCloud.
 
   linux:
-    needs: validate
+    needs: draft
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
@@ -99,7 +153,7 @@ jobs:
         with:
           targets: x86_64-unknown-linux-gnu
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: apps/desktop/src-tauri
 
@@ -118,40 +172,31 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
-      - uses: tauri-apps/tauri-action@v0
+      # rpm queda fuera: el runner no trae rpmbuild y las notas solo prometen deb y AppImage.
+      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
-          tagName: ${{ inputs.tag || github.ref_name }}
-          releaseName: SoundClear ${{ inputs.tag || github.ref_name }}
-          releaseDraft: true
-          releaseBody: |
-            Linux x64 (`.AppImage` y `.deb`).
-
-            **El binario no está firmado.** Tu gestor de paquetes puede avisar: instala el
-            `.deb` con `sudo apt install ./soundclear_*.deb`. El `.AppImage` no necesita
-            instalación: dale permiso de ejecución y ábrelo.
-
-            En Wayland el cristal de la ventana depende del compositor; con GNOME en X11 o
-            con un compositor antiguo la ventana puede verse opaca.
-
-            Proyecto independiente, sin afiliación con SoundCloud.
+          releaseId: ${{ needs.draft.outputs.release_id }}
+          includeUpdaterJson: false
+          retryAttempts: 2
+          args: --bundles deb,appimage
 
   windows:
-    needs: validate
+    needs: draft
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: apps/desktop/src-tauri
 
@@ -160,23 +205,13 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
-      - uses: tauri-apps/tauri-action@v0
+      # NSIS (.exe) y WiX (.msi), explícitos, para que un cambio de targets no se deje uno fuera.
+      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
-          tagName: ${{ inputs.tag || github.ref_name }}
-          releaseName: SoundClear ${{ inputs.tag || github.ref_name }}
-          releaseDraft: true
-          releaseBody: |
-            macOS universal (Apple Silicon e Intel) y Windows x64 (`.exe` y `.msi`).
-
-            **El binario no está firmado ni notarizado.** macOS lo va a bloquear la primera vez:
-            abre el `.app` con clic derecho › **Abrir**, o quita la cuarentena con
-            `xattr -dr com.apple.quarantine /Applications/SoundClear.app`.
-
-            **Windows: el binario no está firmado.** SmartScreen puede avisar:
-            **Más información** › **Ejecutar de todas formas**.
-            El instalador descarga WebView2 si falta.
-
-            Proyecto independiente, sin afiliación con SoundCloud.
+          releaseId: ${{ needs.draft.outputs.release_id }}
+          includeUpdaterJson: false
+          retryAttempts: 2
+          args: --bundles nsis,msi
