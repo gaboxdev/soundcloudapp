@@ -47,7 +47,7 @@ apps/desktop/src-tauri/target/release/bundle/
 
 Ahí salen el `.msi` y el `.exe` (NSIS) en Windows, el `.app` y el `.dmg` en macOS, y el `.deb` y el `AppImage` en Linux. Desde ahí se sube el archivo a la release de GitHub a mano.
 
-El workflow de Actions queda para cuando quieras que las tres plataformas se compilen solas; también se puede lanzar a mano desde **Actions › Release › Run workflow** escribiendo la etiqueta.
+El workflow de Actions (`.github/workflows/release.yml`) compila las tres plataformas al etiquetar `v*`, o a mano desde **Actions › Release › Run workflow** escribiendo la etiqueta. Primero crea **un solo borrador** y después macOS, Windows y Linux suben ahí, para que no se pisen al crear la release. El borrador se publica a mano, cuando estén los artefactos. No modifica una release que ya esté publicada: eso pide una etiqueta nueva, con la versión del `package.json` alineada (`npm run release:check`).
 
 Si tu cambio toca la API de SoundCloud, corre también `npm run probe` (16 sondas contra la API real). No está en CI porque depende de la red y de que SoundCloud siga vivo, pero es la única forma de verificar una suposición sobre la API en vez de confiar en ella.
 

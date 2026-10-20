@@ -24,6 +24,6 @@ npm run dev
 ## Usarlo en SoundClear
 
 1. Despliega el worker y copia la URL (p. ej. `https://soundclear-proxy.<tu-subdominio>.workers.dev`).
-2. En SoundClear: Ajustes → campo `apiBase` → pega la URL del worker (sin barra final).
+2. En SoundClear: **Ajustes → Proxy (avanzado) → URL base del proxy** → pega la URL del worker (sin barra final).
 
 La web app hará `GET <apiBase>/sl-client-id` y `GET <apiBase>/sl-proxy?url=...` para todas las llamadas a la API.

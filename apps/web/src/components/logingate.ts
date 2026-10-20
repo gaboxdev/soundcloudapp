@@ -182,7 +182,7 @@ export function renderLoginGate(): HTMLElement {
       )
       const download = h(
         'a',
-        { className: 'btn btn-primary', href: 'https://github.com/gaboxdev/soundcloudapp', target: '_blank', rel: 'noopener' },
+        { className: 'btn btn-primary', href: 'https://github.com/gaboxdev/soundcloudapp#descargar', target: '_blank', rel: 'noopener' },
       )
       download.innerHTML = svgIcon('github', 18)
       download.appendChild(document.createTextNode(t('Obtener la app de escritorio')))
