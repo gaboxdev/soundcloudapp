@@ -16,11 +16,9 @@ Un regalo para la comunidad de SoundCloud. MIT, para quien lo quiera, como se hi
 
 **[Descargar para macOS](#descargar)** · [Windows y Linux](#descargar) · [Compilar desde el código](#compilar-desde-el-codigo) · [Probar en el navegador](#uso-en-web)
 
-<!-- TODO: capturas reales del reproductor, del inicio y de «Ahora suena».
-     Cuando haya PNG en el repo, sustituir el párrafo siguiente por esas imágenes.
-     Hoy no hay capturas; el icono de arriba no es una pantalla de la app. -->
+![Ahora suena: carátula, onda y la cola](docs/screenshots/now-playing.png)
 
-> **Capturas** — aquí van el reproductor, el inicio y «Ahora suena». Todavía no hay imágenes en el repositorio.
+![Charts, tendencias globales](docs/screenshots/charts.png)
 
 <a id="descargar"></a>
 
